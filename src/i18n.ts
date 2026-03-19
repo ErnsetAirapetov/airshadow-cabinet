@@ -5,8 +5,6 @@ import LanguageDetector from 'i18next-browser-languagedetector';
 const localeLoaders: Record<string, () => Promise<{ default: ResourceLanguage }>> = {
   ru: () => import('./locales/ru.json'),
   en: () => import('./locales/en.json'),
-  zh: () => import('./locales/zh.json'),
-  fa: () => import('./locales/fa.json'),
 };
 
 const SUPPORTED_LANGS = Object.keys(localeLoaders);

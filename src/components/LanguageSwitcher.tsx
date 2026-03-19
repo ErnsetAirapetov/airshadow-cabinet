@@ -4,8 +4,6 @@ import { useState, useRef, useEffect } from 'react';
 const languages = [
   { code: 'ru', name: 'RU', flag: '🇷🇺', fullName: 'Русский' },
   { code: 'en', name: 'EN', flag: '🇬🇧', fullName: 'English' },
-  { code: 'zh', name: 'ZH', flag: '🇨🇳', fullName: '中文' },
-  { code: 'fa', name: 'FA', flag: '🇮🇷', fullName: 'فارسی' },
 ];
 
 export default function LanguageSwitcher() {
@@ -28,13 +26,13 @@ export default function LanguageSwitcher() {
   const changeLanguage = (code: string) => {
     i18n.changeLanguage(code);
     // Set document direction for RTL languages
-    document.documentElement.dir = code === 'fa' ? 'rtl' : 'ltr';
+    document.documentElement.dir = 'ltr';
     setIsOpen(false);
   };
 
   // Set initial direction on mount
   useEffect(() => {
-    document.documentElement.dir = i18n.language === 'fa' ? 'rtl' : 'ltr';
+    document.documentElement.dir = 'ltr';
   }, [i18n.language]);
 
   return (

@@ -32,7 +32,6 @@ import {
   LogoutIcon,
   GamepadIcon,
   ClipboardIcon,
-  InfoIcon,
   CogIcon,
   WheelIcon,
   GiftIcon,
@@ -168,7 +167,6 @@ export function AppHeader({
     ...(hasPolls ? [{ path: '/polls', label: t('nav.polls'), icon: ClipboardIcon }] : []),
     ...(wheelEnabled ? [{ path: '/wheel', label: t('nav.wheel'), icon: WheelIcon }] : []),
     ...(giftEnabled ? [{ path: '/gift', label: t('nav.gift'), icon: GiftIcon }] : []),
-    { path: '/info', label: t('nav.info'), icon: InfoIcon },
   ];
 
   return (
