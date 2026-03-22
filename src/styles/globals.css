@@ -198,6 +198,15 @@
     scrollbar-color: rgb(var(--color-dark-700)) transparent;
   }
 
+  /* Hide scrollbar utility */
+  .scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
   /* Hide scrollbar on mobile (iOS/Android) */
   @media (max-width: 1023px) {
     html,

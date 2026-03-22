@@ -300,7 +300,7 @@ export function AppShell({ children }: AppShellProps) {
           </Link>
 
           {/* Center Navigation */}
-          <nav className="flex min-w-0 items-center gap-1">
+          <nav className="flex min-w-0 items-center gap-1 overflow-x-auto scrollbar-hide">
             {desktopNavItems.map((item) => (
               <Link
                 key={item.path}
