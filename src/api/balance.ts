@@ -79,7 +79,7 @@ export const balanceApi = {
     balance_after?: number;
     bonus_description?: string | null;
     error?: string;
-    eligible_subscriptions?: Array<{ id: number; tariff_name: string; days_left: number }>;
+    eligible_subscriptions?: Array<{ id: number; tariff_name: string; days_left: number; status?: string }>;
     code?: string;
   }> => {
     const response = await apiClient.post('/cabinet/promocode/activate', {

@@ -566,6 +566,7 @@
       "activating": "激活中...",
       "success": "优惠码激活成功！",
       "balanceAdded": "已添加余额：{{amount}}",
+      "expiredLabel": "已过期",
       "errors": {
         "not_found": "优惠码不存在",
         "expired": "优惠码已过期",

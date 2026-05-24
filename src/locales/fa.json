@@ -566,6 +566,7 @@
       "activating": "در حال فعال‌سازی...",
       "success": "کد تخفیف با موفقیت فعال شد!",
       "balanceAdded": "موجودی اضافه شده: {{amount}}",
+      "expiredLabel": "منقضی شده",
       "errors": {
         "not_found": "کد تخفیف یافت نشد",
         "expired": "کد تخفیف منقضی شده",
