@@ -758,6 +758,8 @@
       "activating": "Активация...",
       "success": "Промокод успешно активирован!",
       "balanceAdded": "На баланс начислено: {{amount}} ₽",
+      "expiredLabel": "Истекла",
+      "disabledLabel": "Отключена",
       "errors": {
         "not_found": "Промокод не найден",
         "expired": "Срок действия промокода истёк",

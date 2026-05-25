@@ -729,6 +729,8 @@
       "activating": "Activating...",
       "success": "Promo code activated successfully!",
       "balanceAdded": "Balance added: {{amount}} ₽",
+      "expiredLabel": "Expired",
+      "disabledLabel": "Disabled",
       "errors": {
         "not_found": "Promo code not found",
         "expired": "Promo code has expired",
