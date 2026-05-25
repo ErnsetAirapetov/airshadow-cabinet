@@ -295,7 +295,9 @@ export default function Balance() {
                   <span className="text-dark-400">
                     {sub.status === 'expired'
                       ? t('balance.promocode.expiredLabel', 'Истекла')
-                      : t('balance.promocode.daysLeft', '{{count}} дн.', { count: sub.days_left })}
+                      : sub.status === 'disabled'
+                        ? t('balance.promocode.disabledLabel', 'Отключена')
+                        : t('balance.promocode.daysLeft', '{{count}} дн.', { count: sub.days_left })}
                   </span>
                 </button>
               ))}
