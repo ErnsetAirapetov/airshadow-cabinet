@@ -1,4 +1,5 @@
 import apiClient from './client';
+import { getYandexCid } from '../utils/yandexCid';
 import type {
   Subscription,
   SubscriptionStatusResponse,
@@ -83,7 +84,10 @@ export const subscriptionApi = {
   }> => {
     const response = await apiClient.post(
       '/cabinet/subscription/renew',
-      ...bodyWithSubId({ period_days: periodDays }, subscriptionId),
+      ...bodyWithSubId(
+        { period_days: periodDays, yandex_cid: getYandexCid() || undefined },
+        subscriptionId,
+      ),
     );
     return response.data;
   },
@@ -108,7 +112,7 @@ export const subscriptionApi = {
   }> => {
     const response = await apiClient.post(
       '/cabinet/subscription/traffic',
-      ...bodyWithSubId({ gb }, subscriptionId),
+      ...bodyWithSubId({ gb, yandex_cid: getYandexCid() || undefined }, subscriptionId),
     );
     return response.data;
   },
@@ -127,7 +131,7 @@ export const subscriptionApi = {
   }> => {
     const response = await apiClient.put(
       '/cabinet/subscription/traffic',
-      ...bodyWithSubId({ gb }, subscriptionId),
+      ...bodyWithSubId({ gb, yandex_cid: getYandexCid() || undefined }, subscriptionId),
     );
     return response.data;
   },
@@ -181,7 +185,7 @@ export const subscriptionApi = {
   }> => {
     const response = await apiClient.post(
       '/cabinet/subscription/devices/purchase',
-      ...bodyWithSubId({ devices }, subscriptionId),
+      ...bodyWithSubId({ devices, yandex_cid: getYandexCid() || undefined }, subscriptionId),
     );
     return response.data;
   },
@@ -353,7 +357,9 @@ export const subscriptionApi = {
   },
 
   activateTrial: async (): Promise<Subscription> => {
-    const response = await apiClient.post<Subscription>('/cabinet/subscription/trial');
+    const response = await apiClient.post<Subscription>('/cabinet/subscription/trial', {
+      yandex_cid: getYandexCid() || undefined,
+    });
     return response.data;
   },
 
@@ -389,7 +395,7 @@ export const subscriptionApi = {
   }> => {
     const response = await apiClient.post(
       '/cabinet/subscription/purchase',
-      ...bodyWithSubId({ selection }, subscriptionId),
+      ...bodyWithSubId({ selection, yandex_cid: getYandexCid() || undefined }, subscriptionId),
     );
     return response.data;
   },
@@ -398,6 +404,14 @@ export const subscriptionApi = {
     tariffId: number,
     periodDays: number,
     trafficGb?: number,
+    /**
+     * Subscription ID being renewed. Pass this when the user clicked
+     * "Renew" on an existing subscription so the backend can resolve
+     * the target row by ID instead of doing a (user_id, tariff_id)
+     * re-lookup that races with concurrent panel webhooks. Omit when
+     * this is a fresh purchase from the catalog.
+     */
+    subscriptionId?: number,
   ): Promise<{
     success: boolean;
     message: string;
@@ -411,6 +425,8 @@ export const subscriptionApi = {
       tariff_id: tariffId,
       period_days: periodDays,
       traffic_gb: trafficGb,
+      subscription_id: subscriptionId,
+      yandex_cid: getYandexCid() || undefined,
     });
     return response.data;
   },
@@ -457,7 +473,7 @@ export const subscriptionApi = {
   }> => {
     const response = await apiClient.post(
       '/cabinet/subscription/countries',
-      ...bodyWithSubId({ countries }, subscriptionId),
+      ...bodyWithSubId({ countries, yandex_cid: getYandexCid() || undefined }, subscriptionId),
     );
     return response.data;
   },
@@ -557,7 +573,10 @@ export const subscriptionApi = {
   }> => {
     const response = await apiClient.post(
       '/cabinet/subscription/tariff/switch',
-      ...bodyWithSubId({ tariff_id: tariffId, period_days: 30 }, subscriptionId),
+      ...bodyWithSubId(
+        { tariff_id: tariffId, period_days: 30, yandex_cid: getYandexCid() || undefined },
+        subscriptionId,
+      ),
     );
     return response.data;
   },

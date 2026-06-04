@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { usePlatform } from '@/platform';
+import { copyToClipboard } from '@/utils/clipboard';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../store/auth';
@@ -20,46 +21,7 @@ import { Card } from '@/components/data-display/Card';
 import { Button } from '@/components/primitives/Button';
 import { Switch } from '@/components/primitives/Switch';
 import { staggerContainer, staggerItem } from '@/components/motion/transitions';
-
-// Icons
-const CopyIcon = () => (
-  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184"
-    />
-  </svg>
-);
-
-const CheckIcon = () => (
-  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-  </svg>
-);
-
-const ShareIcon = () => (
-  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M7 8l5-5m0 0l5 5m-5-5v12" />
-    <path strokeLinecap="round" strokeLinejoin="round" d="M4 15v3a2 2 0 002 2h12a2 2 0 002-2v-3" />
-  </svg>
-);
-
-const ArrowRightIcon = () => (
-  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-  </svg>
-);
-
-const PencilIcon = () => (
-  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-    <path
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z"
-    />
-  </svg>
-);
+import { CopyIcon, CheckIcon, ShareIcon, ArrowRightIcon, PencilIcon } from '@/components/icons';
 
 export default function Profile() {
   const { t } = useTranslation();
@@ -115,7 +77,7 @@ export default function Profile() {
 
   const copyReferralLink = () => {
     if (referralLink) {
-      navigator.clipboard.writeText(referralLink);
+      void copyToClipboard(referralLink);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     }
@@ -140,7 +102,7 @@ export default function Profile() {
     }
 
     const telegramUrl = `https://t.me/share/url?url=${encodeURIComponent(referralLink)}&text=${encodeURIComponent(shareText)}`;
-    window.open(telegramUrl, '_blank', 'noopener,noreferrer');
+    openTelegramLink(telegramUrl);
   };
 
   const resendVerificationMutation = useMutation({
@@ -192,7 +154,8 @@ export default function Profile() {
       setChangeEmailStep('success');
       const updatedUser = await authApi.getMe();
       setUser(updatedUser);
-      queryClient.invalidateQueries({ queryKey: ['user'] });
+      // Note: auth user lives in the zustand store, not in React Query —
+      // the explicit setUser above IS the refresh. No ['user'] query exists.
     },
     onError: (err: { response?: { data?: { detail?: string } } }) => {
       const detail = err.response?.data?.detail;
@@ -224,7 +187,7 @@ export default function Profile() {
   }, [verificationResendCooldown]);
 
   // Auto-focus inputs on step change (skip on Telegram — keyboard hides bottom nav)
-  const { platform: profilePlatform } = usePlatform();
+  const { platform: profilePlatform, openTelegramLink } = usePlatform();
   useEffect(() => {
     if (profilePlatform === 'telegram') return;
     const timer = setTimeout(() => {
@@ -356,15 +319,7 @@ export default function Profile() {
               </h2>
               <p className="text-sm text-dark-400">{t('profile.accounts.subtitle')}</p>
             </div>
-            <svg
-              className="h-5 w-5 text-dark-400"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-            </svg>
+            <ArrowRightIcon className="h-5 w-5 text-dark-400" />
           </div>
         </Card>
       </motion.div>
@@ -380,7 +335,7 @@ export default function Profile() {
                 className="flex items-center gap-1 text-accent-400 transition-colors hover:text-accent-300"
               >
                 <span className="text-sm">{t('referral.title')}</span>
-                <ArrowRightIcon />
+                <ArrowRightIcon className="h-4 w-4" />
               </Link>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -399,7 +354,7 @@ export default function Profile() {
                   </span>
                 </Button>
                 <Button onClick={shareReferralLink} variant="secondary">
-                  <ShareIcon />
+                  <ShareIcon className="h-4 w-4" />
                   <span className="ml-2 hidden sm:inline">{t('referral.shareButton')}</span>
                 </Button>
               </div>
