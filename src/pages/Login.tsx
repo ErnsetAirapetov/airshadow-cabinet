@@ -169,6 +169,15 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
     }
   }, [isAuthenticated, navigate, getReturnUrl]);
 
+  // Реферальные визиты (новые юзеры) уводим на регистрацию при первом заходе.
+  // Mount-only: дальнейшее ручное переключение на "Вход" не перебивается.
+  useEffect(() => {
+    if (mode === 'login' && getPendingReferralCode()) {
+      navigate(`/register${location.search}`, { replace: true, state: location.state });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Try Telegram WebApp authentication on mount (with auto-retry on 401)
   // Wait for auth store initialization to complete to avoid race conditions
   // with stale tokens triggering interceptor refresh/redirect loops
