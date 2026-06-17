@@ -257,7 +257,8 @@ function App() {
       <BlockingOverlay />
       <Routes>
         {/* Public routes */}
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={<Login mode="login" />} />
+        <Route path="/register" element={<Login mode="register" />} />
         <Route path="/auth/telegram/callback" element={<TelegramCallback />} />
         <Route path="/auth/telegram" element={<TelegramRedirect />} />
         <Route path="/tg" element={<TelegramRedirect />} />

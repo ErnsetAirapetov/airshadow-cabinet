@@ -182,6 +182,8 @@
     "resetPassword": "Reset password",
     "loginWithTelegram": "Login with Telegram",
     "loginWithEmail": "Login with Email",
+    "orContinueWith": "or continue with",
+    "createAccount": "Create account",
     "noAccount": "Don't have an account?",
     "hasAccount": "Already have an account?",
     "or": "or",

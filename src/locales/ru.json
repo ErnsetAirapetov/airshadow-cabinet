@@ -185,6 +185,8 @@
     "resetPassword": "Сбросить пароль",
     "loginWithTelegram": "Войти через Telegram",
     "loginWithEmail": "Войти по Email",
+    "orContinueWith": "или войти через",
+    "createAccount": "Создать аккаунт",
     "noAccount": "Нет аккаунта?",
     "hasAccount": "Уже есть аккаунт?",
     "or": "или",
