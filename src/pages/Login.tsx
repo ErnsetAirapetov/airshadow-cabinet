@@ -25,7 +25,7 @@ import { saveOAuthState } from '../utils/oauth';
 import { getPendingReferralCode } from '../utils/referral';
 import { UsersIcon, EmailIcon, RefreshIcon, ChevronDownIcon } from '@/components/icons';
 
-export default function Login() {
+export default function Login({ mode }: { mode: 'login' | 'register' }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
@@ -48,9 +48,7 @@ export default function Login() {
   // Get referral code from localStorage (captured from ?ref= param at module level in auth store)
   const referralCode = getPendingReferralCode() || '';
 
-  const [authMode, setAuthMode] = useState<'login' | 'register'>(() =>
-    referralCode ? 'register' : 'login',
-  );
+  const authMode = mode;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -87,6 +85,15 @@ export default function Login() {
     // По умолчанию на главную
     return '/';
   }, [location.state]);
+
+  // Переключатель Вход/Регистрация навигирует между роутами — URL источник
+  // истины. Сохраняем query (?ref=) и return-url state.
+  const switchMode = useCallback(
+    (target: 'login' | 'register') => {
+      navigate(`/${target}${location.search}`, { replace: true, state: location.state });
+    },
+    [navigate, location.search, location.state],
+  );
 
   // Fetch branding with unified cache
   const cachedBranding = useMemo(() => getCachedBranding(), []);
@@ -392,7 +399,7 @@ export default function Login() {
             <button
               onClick={() => {
                 setRegisteredEmail(null);
-                setAuthMode('login');
+                navigate('/login');
               }}
               className="btn-secondary w-full"
             >
@@ -586,7 +593,7 @@ export default function Login() {
                                   ? 'bg-accent-500 text-white'
                                   : 'text-dark-400 hover:text-dark-200'
                               }`}
-                              onClick={() => setAuthMode('login')}
+                              onClick={() => switchMode('login')}
                             >
                               {t('auth.login')}
                             </button>
@@ -597,7 +604,7 @@ export default function Login() {
                                   ? 'bg-accent-500 text-white'
                                   : 'text-dark-400 hover:text-dark-200'
                               }`}
-                              onClick={() => setAuthMode('register')}
+                              onClick={() => switchMode('register')}
                             >
                               {t('auth.register', 'Register')}
                             </button>
