@@ -541,7 +541,7 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
                         type="button"
                         className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${
                           authMode === 'login'
-                            ? 'bg-accent-500 text-white'
+                            ? 'bg-accent-500 text-on-accent'
                             : 'text-dark-400 hover:text-dark-200'
                         }`}
                         onClick={() => switchMode('login')}
@@ -552,7 +552,7 @@ export default function Login({ mode }: { mode: 'login' | 'register' }) {
                         type="button"
                         className={`flex-1 rounded-md py-2 text-sm font-medium transition-all ${
                           authMode === 'register'
-                            ? 'bg-accent-500 text-white'
+                            ? 'bg-accent-500 text-on-accent'
                             : 'text-dark-400 hover:text-dark-200'
                         }`}
                         onClick={() => switchMode('register')}
