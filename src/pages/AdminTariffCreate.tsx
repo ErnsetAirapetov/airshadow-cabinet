@@ -4,12 +4,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   tariffsApi,
-  TariffDetail,
-  TariffCreateRequest,
-  TariffUpdateRequest,
-  PeriodPrice,
-  ServerInfo,
-  ExternalSquadInfo,
+  type TariffDetail,
+  type TariffCreateRequest,
+  type TariffUpdateRequest,
+  type PeriodPrice,
+  type ServerInfo,
+  type ExternalSquadInfo,
 } from '../api/tariffs';
 import { AdminBackButton } from '../components/admin';
 import { createNumberInputHandler, toNumber } from '../utils/inputHelpers';
@@ -50,6 +50,7 @@ export default function AdminTariffCreate() {
   const [selectedExternalSquad, setSelectedExternalSquad] = useState<string | null>(null);
   const [selectedPromoGroups, setSelectedPromoGroups] = useState<number[]>([]);
   const [dailyPriceKopeks, setDailyPriceKopeks] = useState<number | ''>(0);
+  const [lavaProductId, setLavaProductId] = useState('');
 
   // Traffic topup
   const [trafficTopupEnabled, setTrafficTopupEnabled] = useState(false);
@@ -122,6 +123,7 @@ export default function AdminTariffCreate() {
         data.promo_groups?.filter((pg) => pg.is_selected).map((pg) => pg.id) || [],
       );
       setDailyPriceKopeks(data.daily_price_kopeks || 0);
+      setLavaProductId(data.lava_product_id || '');
       setTrafficTopupEnabled(data.traffic_topup_enabled || false);
       setMaxTopupTrafficGb(data.max_topup_traffic_gb || 0);
       setTrafficTopupPackages(data.traffic_topup_packages || {});
@@ -153,9 +155,12 @@ export default function AdminTariffCreate() {
   const handleSubmit = () => {
     const isDaily = tariffType === 'daily';
 
+    // PATCH applies a field only when it is present in the payload, so empty
+    // values ('' / []) must still be sent when editing — omitting them makes
+    // clearing the description or unchecking all promo groups impossible.
     const data: TariffCreateRequest | TariffUpdateRequest = {
       name,
-      description: description || undefined,
+      description: isEdit ? description : description || undefined,
       is_active: isActive,
       show_in_gift: showInGift,
       traffic_limit_gb: toNumber(trafficLimitGb, 100),
@@ -167,12 +172,14 @@ export default function AdminTariffCreate() {
       period_prices: isDaily ? [] : periodPrices.filter((p) => p.price_kopeks >= 0),
       allowed_squads: selectedSquads,
       external_squad_uuid: selectedExternalSquad || null,
-      promo_group_ids: selectedPromoGroups.length > 0 ? selectedPromoGroups : undefined,
+      promo_group_ids: selectedPromoGroups,
       traffic_topup_enabled: trafficTopupEnabled,
       traffic_topup_packages: trafficTopupPackages,
       max_topup_traffic_gb: toNumber(maxTopupTrafficGb),
       is_daily: isDaily,
       daily_price_kopeks: isDaily ? toNumber(dailyPriceKopeks) : 0,
+      // Пустая строка отвязывает тариф от продукта Lava
+      lava_product_id: lavaProductId.trim(),
       traffic_reset_mode: trafficResetMode,
     };
 
@@ -457,6 +464,25 @@ export default function AdminTariffCreate() {
             </div>
           )}
 
+          {/* Lava recurrent product */}
+          <div>
+            <label
+              htmlFor="tariff-lava-product"
+              className="mb-2 block text-sm font-medium text-dark-300"
+            >
+              {t('admin.tariffs.lavaProductLabel')}
+            </label>
+            <input
+              id="tariff-lava-product"
+              type="text"
+              value={lavaProductId}
+              onChange={(e) => setLavaProductId(e.target.value)}
+              className="input w-full"
+              placeholder="6be21df9-0bcd-44ac-9c2c-3be7bc94decc"
+            />
+            <p className="mt-2 text-xs text-dark-500">{t('admin.tariffs.lavaProductDesc')}</p>
+          </div>
+
           {/* Traffic Limit */}
           <div>
             <label
@@ -600,7 +626,7 @@ export default function AdminTariffCreate() {
                       setEditingPeriodPrices((prev) => ({ ...prev, [period.days]: val }));
                       if (val !== '') {
                         const num = parseFloat(val);
-                        if (!isNaN(num)) {
+                        if (!Number.isNaN(num)) {
                           updatePeriodPrice(period.days, Math.max(0, num));
                         }
                       }
@@ -938,7 +964,7 @@ export default function AdminTariffCreate() {
                                 setEditingPackagePrices((prev) => ({ ...prev, [gb]: val }));
                                 if (val !== '') {
                                   const num = parseFloat(val);
-                                  if (!isNaN(num)) {
+                                  if (!Number.isNaN(num)) {
                                     setTrafficTopupPackages((prev) => ({
                                       ...prev,
                                       [gb]: Math.max(0, num) * 100,

@@ -20,7 +20,7 @@
     "delete": "删除",
     "currency": "¥",
     "copy": "复制",
-    "all": "All",
+    "all": "全部",
     "add": "添加",
     "refresh": "刷新",
     "retry": "重试",
@@ -110,6 +110,18 @@
       "insufficientTitle": "余额不足",
       "insufficientMessage": "续期需要 {{required}} {{currency}}，当前余额 {{balance}} {{currency}}"
     },
+    "sbpRecurring": {
+      "confirmedTitle": "SBP 扣款已确认",
+      "confirmedMessage": "已成功扣款 {{amount}} {{currency}}",
+      "failedTitle": "SBP 扣款失败",
+      "failedMessage": "SBP 自动扣款失败",
+      "pastDueTitle": "SBP 扣款已逾期",
+      "pastDueMessage": "您的 SBP 自动扣款已逾期，请检查银行应用。",
+      "cancelledTitle": "SBP 自动扣款已关闭",
+      "cancelledMessage": "SBP 自动扣款已被关闭",
+      "activatedTitle": "SBP 自动扣款已开通",
+      "activatedMessage": "SBP 自动扣款已成功开通"
+    },
     "account": {
       "bannedTitle": "账户已封禁",
       "bannedMessage": "您的账户已被封禁",
@@ -183,6 +195,7 @@
     "telegramRetryFailed": "授权失败。请关闭应用后重新打开。",
     "telegramReopenHint": "如果问题持续存在，请关闭并重新打开应用",
     "telegramNotConfigured": "Telegram机器人未配置",
+    "botOutdated": "机器人版本与后台不兼容，请将机器人更新至 v3.33.0 或更高版本。",
     "telegramUnavailable": "Telegram登录暂时不可用",
     "authenticating": "正在验证...",
     "orOpenInApp": "或在应用中打开机器人",
@@ -217,6 +230,10 @@
     "sendResetLink": "发送重置链接",
     "tooManyAttempts": "尝试次数过多，请稍后再试",
     "verificationEmailNotice": "注册后，验证邮件将发送到您的邮箱",
+    "legalConsentPrefix": "我已阅读",
+    "legalConsentTitle": "还差一步",
+    "legalConsentSubtitle": "创建账户前，请确认您已阅读以下文件。",
+    "legalConsentContinue": "继续",
     "continueWithGoogle": "通过 Google 继续",
     "continueWithYandex": "通过 Yandex 继续",
     "continueWithDiscord": "通过 Discord 继续",
@@ -237,6 +254,7 @@
   "dashboard": {
     "title": "个人中心",
     "welcome": "欢迎，{{name}}！",
+    "welcomeNoName": "欢迎！",
     "yourSubscription": "您的订阅",
     "quickActions": "快捷操作",
     "viewSubscription": "管理订阅",
@@ -264,7 +282,7 @@
       "traffic": "流量",
       "devices": "设备",
       "expiredDate": "过期时间",
-      "activeUntil": "已过期 — 至 {{date}}"
+      "activeUntil": "有效期至"
     },
     "deviceLimitReached": "断开设备以添加新设备",
     "suspended": {
@@ -275,9 +293,9 @@
     "showAll": "全部显示",
     "subscriptions": "订阅",
     "connectDevice": "连接设备",
-    "devicesConnectedUnlimited": "已连接 {{count}} 台设备",
+    "devicesConnectedUnlimited": "已连接 {{used}} 台设备 · 无限制",
     "devicesOfMax": "{{used}} / {{max}}",
-    "maxUsage": "最大",
+    "maxUsage": "最大 {{amount}}",
     "remaining": "剩余",
     "stats": {
       "balance": "余额",
@@ -286,9 +304,9 @@
     "tariff": "套餐",
     "trafficUsageTitle": "流量使用",
     "trialOffer": {
-      "freeDesc": "免费试用 {{days}} 天 — 无需付款",
+      "freeDesc": "免费试用我们的 VPN：无需任何承诺",
       "freeTitle": "免费试用",
-      "paidDesc": "{{days}} 天试用，仅需 {{price}}",
+      "paidDesc": "从试用订阅开始吧",
       "paidTitle": "付费试用"
     },
     "unlimited": "无限",
@@ -446,7 +464,7 @@
       "newDeviceLimit": "新设备限制",
       "reduce": "减少",
       "reduceDevices": "减少设备数量",
-      "reduceDevicesDescription": "调整您的设备限制。如有需要，请先断开多余设备的连接",
+      "reduceDevicesDescription": "您可以将设备数量减少至套餐的最低限制",
       "reduceDevicesTitle": "减少设备数量",
       "reduceUnavailable": "当前无法减少设备数量",
       "reducing": "正在减少…"
@@ -564,13 +582,64 @@
     },
     "allTariffsPurchased": "所有套餐已购买",
     "autopay": "自动续订",
+    "sbpRecurring": {
+      "title": "SBP 自动扣款",
+      "connect": "开通",
+      "confirmInBank": "请在银行应用中确认",
+      "cancel": "关闭",
+      "confirmCancel": "关闭 SBP 自动扣款？您的订阅将不再通过 SBP 自动续订。",
+      "cancelled": "SBP 自动扣款已关闭",
+      "enableError": "开通 SBP 自动扣款失败",
+      "cancelError": "取消 SBP 自动扣款失败",
+      "statusPending": "等待银行应用确认",
+      "statusActive": "已启用",
+      "statusPastDue": "扣款失败 — 请重试",
+      "nextCharge": "下次扣款 {{date}}",
+      "amountPerInterval": "{{amount}} ₽ {{interval}}",
+      "interval": {
+        "day": "每天",
+        "week": "每周",
+        "month": "每月",
+        "year": "每年"
+      },
+      "autopayHint": "您的订阅将通过 SBP 自动扣款，无需保存银行卡",
+      "purchaseButton": "⚡ 通过SBP自动扣款订阅",
+      "purchaseHint": "首次扣款即在银行应用中确认绑定；续费将按资费周期自动扣款。"
+    },
+    "lavaRecurring": {
+      "title": "Lava 自动续订",
+      "connect": "连接",
+      "payFirst": "支付首期账单",
+      "cancel": "关闭",
+      "confirmCancel": "要关闭 Lava 自动续订吗？订阅将不再自动续订。",
+      "cancelled": "已关闭 Lava 自动续订",
+      "enableError": "无法开启 Lava 自动续订",
+      "cancelError": "无法关闭 Lava 自动续订",
+      "statusPending": "等待支付首期账单",
+      "statusActive": "已启用",
+      "statusPastDue": "扣款失败 — 请重试",
+      "nextCharge": "下次扣款 {{date}}",
+      "amountPerPeriod": "{{amount}} ₽ {{period}}",
+      "amountPerDays": "每 {{days}} 天 {{amount}} ₽",
+      "period": {
+        "day": "每天",
+        "week": "每周",
+        "month": "每月",
+        "quarter": "每季度",
+        "halfYear": "每半年",
+        "year": "每年"
+      },
+      "autopayHint": "订阅将通过 Lava 自动续订",
+      "purchaseButton": "⚡ 使用 Lava 自动续订下单",
+      "purchaseHint": "首期账单通过 Lava 链接支付；之后按产品周期自动扣款续订。"
+    },
     "backToList": "返回订阅列表",
     "confirmDelete": "删除订阅？",
     "cta": {
       "renewHint": "订阅已过期 — 续订以继续使用",
-      "activeHint": "订阅有效 — 您可以连接设备并使用 VPN",
-      "expiredHint": "订阅已过期 — 续订以继续使用",
-      "trialHint": "您正在试用中 — 升级到付费套餐以解锁所有功能"
+      "activeHint": "续费和更换套餐",
+      "expiredHint": "选择套餐并付款",
+      "trialHint": "更多流量和设备"
     },
     "dailyAutoCharge": "每日自动扣费",
     "defaultName": "订阅",
@@ -590,16 +659,16 @@
     "statusTrial": "试用",
     "daysShort": "天",
     "expiredBanner": {
-      "selectTariff": "选择套餐",
+      "selectTariff": "您的订阅已到期。请在下方选择套餐，以恢复 VPN 访问。",
       "title": "订阅已过期"
     },
     "trialInfo": {
-      "description": "免费试用我们的服务 {{days}} 天",
-      "remaining": "剩余 {{count}} 天",
+      "description": "您正在使用服务的试用版。请在下方选择套餐以获得完整访问权限。",
+      "remaining": "剩余",
       "title": "试用期"
     },
     "trialUpgrade": {
-      "description": "升级到付费订阅以解锁所有功能并继续使用",
+      "description": "您的试用期即将结束。请选择合适的套餐，以继续无限制使用 VPN。",
       "title": "升级订阅"
     }
   },
@@ -634,6 +703,9 @@
       },
       "jupiter": {
         "description": "通过 Jupiter (FPGate P2P) 使用 SBP 支付"
+      },
+      "cispay": {
+        "description": "通过 cisPay 使用银行卡或 SBP 支付"
       },
       "donut": {
         "description": "通过 Donut P2P 使用银行卡或 SBP 支付"
@@ -728,7 +800,10 @@
       "pageTitle": "已保存的银行卡",
       "backToBalance": "返回",
       "empty": "暂无已保存的银行卡。银行卡将在下次充值时自动保存。",
-      "loadError": "加载银行卡失败，请稍后重试。"
+      "loadError": "加载银行卡失败，请稍后重试。",
+      "sbpSection": "SBP 自动扣款",
+      "sbpBinding": "SBP 绑定",
+      "sbpUnlink": "关闭 SBP 自动扣款"
     },
     "paymentSuccess": {
       "title": "支付成功",
@@ -972,7 +1047,7 @@
       "noSubscription": "需要有效订阅才能转动轮盘。请先激活订阅。",
       "selectSubscription": "请先选择订阅"
     },
-    "payWithStars": "支付 {stars} Stars",
+    "payWithStars": "支付 Stars",
     "processingPayment": "处理中...",
     "starsPaymentSuccess": "支付成功！抽奖结果已发送到Telegram。",
     "starsPaymentFailed": "支付失败。请重试。",
@@ -1424,7 +1499,7 @@
     },
     "paymentMethods": {
       "title": "支付方法",
-      "description": "配置顺序和显示条件",
+      "subtitle": "配置顺序和显示条件",
       "enabled": "开启",
       "disabled": "关闭",
       "notConfigured": "未配置",
@@ -1440,6 +1515,8 @@
       "openUrlDirectHint": "开启 — 支付链接立即打开,不显示中间的按钮面板。关闭 — 显示「打开支付」按钮。在 Telegram 内两种情况都会在外部浏览器中打开链接(否则通过银行 App/SBP 付款会失败);支付完成后返回结果页。Stars/CryptoBot(t.me/ 链接)始终原生打开,不受此开关影响。",
       "displayName": "显示名称",
       "displayNameHint": "留空以使用默认名称",
+      "description": "描述",
+      "descriptionHint": "显示在支付方法名称下方。留空则使用默认文本",
       "subOptions": "支付选项",
       "minAmount": "最小金额（戈比）",
       "maxAmount": "最大金额（戈比）",
@@ -1625,7 +1702,7 @@
     },
     "broadcasts": {
       "title": "广播",
-      "subtitle": "历史和管理",
+      "subtitle": "向用户群发消息",
       "create": "创建群发",
       "empty": "没有广播",
       "selectFilter": "选择受众",
@@ -1685,6 +1762,7 @@
       "customButtonTypeUrl": "链接",
       "customButtonCallbackPlaceholder": "callback_data（例如 back_to_menu）",
       "customButtonUrlPlaceholder": "https://example.com",
+      "customButtonEmojiIdPlaceholder": "自定义 Emoji ID（可选）",
       "category": "类别",
       "categoryNews": "新闻",
       "categoryPromo": "促销",
@@ -1922,6 +2000,7 @@
         "payments_etoplatezhi": "Etoplatezhi",
         "payments_antilopay": "Antilopay",
         "payments_jupiter": "Jupiter",
+        "payments_cispay": "CisPay",
         "payments_donut": "Donut",
         "payments_lava": "Lava",
         "payments_apple_iap": "Apple IAP",
@@ -1977,7 +2056,17 @@
         "telegramOidcClientSecret": "Client Secret"
       },
       "offlineConv": "离线转化",
-      "apiKey": "API 密钥"
+      "apiKey": "API 密钥",
+      "legalFooter": "法律页脚",
+      "legalFooterDesc": "登录页面底部的要约、隐私政策和定期付款链接",
+      "botStartVideo": "机器人开始菜单视频",
+      "botStartVideoDesc": "机器人会在 /start 消息中附带该视频，替代 logo 图片。文件仅上传到 Telegram 一次，我们只保存其标识符。",
+      "botStartVideoUpload": "上传视频",
+      "botStartVideoReplace": "替换视频",
+      "botStartVideoRemove": "删除",
+      "botStartVideoActive": "已设置视频",
+      "botStartVideoNone": "未设置视频 — 菜单使用 logo 图片",
+      "botStartVideoError": "视频上传失败"
     },
     "buttons": {
       "color": "按钮颜色",
@@ -2026,7 +2115,7 @@
       "builtinButtons": "内置栏目",
       "resetConfirm": "将菜单重置为默认设置？所有更改将丢失。",
       "buttonTextPlaceholder": "按钮文本",
-      "customLabelsHint": "每种语言的按钮文本",
+      "customLabelsHint": "留空 = 默认名称",
       "moveUp": "上移",
       "moveDown": "下移",
       "openIn": "打开方式",
@@ -2298,7 +2387,9 @@
         "periodsRequired": "请添加至少一个期限",
         "dailyPriceRequired": "请输入大于0的每日价格",
         "trafficPackagesRequired": "请添加至少一个流量包（或关闭流量购买）"
-      }
+      },
+      "lavaProductLabel": "Lava 产品（自动续订）",
+      "lavaProductDesc": "来自 Lava 后台的产品 UUID：价格与扣款周期在那里设置。留空则该套餐不支持自动续订。"
     },
     "servers": {
       "title": "服务器管理",
@@ -2578,10 +2669,10 @@
         "programEnabled": "推荐计划已启用",
         "programEnabledDesc": "启用整个推荐人功能",
         "requisitesText": "收款信息文本",
-        "requisitesTextDesc": "将在合作申请表单中向用户显示",
+        "requisitesTextDesc": "自定义提示，告知用户提现时需填写的收款信息",
         "requisitesTextPlaceholder": "请输入您的收款信息...",
         "withdrawalEnabled": "允许提款",
-        "withdrawalEnabledDesc": "允许用户请求提款"
+        "withdrawalEnabledDesc": "允许合作伙伴申请提现推荐余额"
       },
       "settingsLoadError": "加载推荐设置失败",
       "settingsSection": {
@@ -2669,7 +2760,8 @@
         "subscriptionDays": "订阅天数",
         "trialSubscription": "试用订阅",
         "promoGroup": "折扣组",
-        "discount": "折扣 %"
+        "discount": "折扣 %",
+        "balanceAndDays": "余额 + 天数"
       },
       "modal": {
         "editPromocode": "编辑促销码",
@@ -2687,6 +2779,11 @@
         "typeTrialSubscription": "试用订阅",
         "typePromoGroup": "折扣组",
         "typeDiscount": "百分比折扣",
+        "typeBonusSet": "奖励组合（余额 / 天数 / 优惠组）",
+        "bonusComposition": "促销码内容",
+        "includeBalance": "余额奖励",
+        "includeDays": "订阅天数",
+        "includePromoGroup": "优惠组",
         "bonusAmount": "奖金金额",
         "rub": "卢布",
         "daysCount": "天数",
@@ -2776,6 +2873,7 @@
       },
       "validation": {
         "codeRequired": "请输入促销码",
+        "bonusSetEmpty": "请为促销码至少选择一项奖励",
         "balanceRequired": "奖金金额必须大于0",
         "daysRequired": "天数必须大于0",
         "groupRequired": "请选择折扣组",
@@ -2883,7 +2981,8 @@
           "sync": "同步",
           "tickets": "工单",
           "gifts": "礼物",
-          "referrals": "推荐"
+          "referrals": "推荐",
+          "activity": "活动记录"
         },
         "noTickets": "该用户没有工单",
         "ticketsCount": "个工单",
@@ -2996,7 +3095,13 @@
           "deviceLimitUpdated": "设备限制已更新",
           "invalidDays": "请输入有效天数（大于0）",
           "backToList": "返回订阅列表",
-          "createNew": "新建"
+          "createNew": "新建",
+          "sbpTitle": "SBP 自动扣款",
+          "sbpCancel": "关闭",
+          "sbpCancelled": "SBP 自动扣款已关闭",
+          "sbpStatus_PENDING": "待确认",
+          "sbpStatus_ACTIVE": "已启用",
+          "sbpStatus_PAST_DUE": "扣款失败"
         },
         "balance": {
           "current": "当前余额",
@@ -3084,10 +3189,88 @@
           "areYouSure": "确定要继续？",
           "title": "操作"
         },
-        "noVpnData": "无 VPN 数据"
+        "noVpnData": "无 VPN 数据",
+        "activity": {
+          "total": "事件总数",
+          "empty": "暂无活动记录",
+          "filters": {
+            "all": "全部",
+            "payments": "支付",
+            "events": "事件",
+            "promo": "促销",
+            "tickets": "工单",
+            "gifts": "礼物",
+            "referrals": "推荐",
+            "logins": "登录",
+            "clicks": "点击"
+          },
+          "types": {
+            "transaction": "交易",
+            "event": "事件",
+            "promocode": "促销码",
+            "coupon": "优惠券",
+            "ticket": "工单",
+            "wheel_spin": "幸运转盘",
+            "poll": "问卷已完成",
+            "gift_sent": "已发送礼物",
+            "gift_received": "已收到礼物",
+            "referral_earning": "推荐收益",
+            "cabinet_login": "登录后台",
+            "withdrawal": "提现申请",
+            "button_click": "机器人按钮",
+            "cabinet_action": "后台操作"
+          },
+          "sources": {
+            "bot": "机器人",
+            "cabinet": "后台"
+          },
+          "subtypes": {
+            "deposit": "充值",
+            "withdrawal": "扣款",
+            "subscription_payment": "订阅付款",
+            "refund": "退款",
+            "failed_refund": "退款失败",
+            "referral_reward": "推荐奖励",
+            "poll_reward": "问卷奖励",
+            "gift_payment": "礼物付款",
+            "activation": "激活",
+            "purchase": "购买",
+            "subscription_purchase": "订阅购买",
+            "renewal": "续订",
+            "balance_topup": "余额充值",
+            "promo_group_change": "促销组变更",
+            "campaign_registration": "活动注册",
+            "referral_link_visit": "推荐链接访问",
+            "referral_registration": "推荐注册",
+            "trial_activation": "试用激活",
+            "open": "打开",
+            "answered": "已回复",
+            "pending": "等待中",
+            "closed": "已关闭",
+            "redeemed": "已兑换",
+            "approved": "已批准",
+            "rejected": "已拒绝",
+            "completed": "已完成",
+            "command": "命令"
+          }
+        }
       },
       "notFound": "未找到用户",
       "purchaseCount": "购买次数：{{count}}",
+      "sendMessage": {
+        "button": "✉️ 发送消息",
+        "title": "向用户发送消息",
+        "placeholder": "机器人将发送给用户的文本（支持 HTML）",
+        "send": "发送",
+        "sending": "发送中...",
+        "success": "消息已发送给用户",
+        "noTelegram": "该用户仅通过邮箱注册，无法接收 Telegram 消息",
+        "errors": {
+          "no_telegram_id": "该用户仅通过邮箱注册，无法接收 Telegram 消息",
+          "forbidden": "用户已屏蔽机器人或无法接收消息",
+          "bad_request": "Telegram 拒绝了该消息。请检查文本（HTML 标记）后重试"
+        }
+      },
       "userActions": {
         "delete": "删除用户",
         "disable": "禁用",
@@ -3166,7 +3349,9 @@
         "notificationsFailed": "（失败: {{count}}）",
         "sendError": "发送优惠失败",
         "notificationsSent": "已发送通知",
-        "offersCreated": "已创建优惠"
+        "offersCreated": "已创建优惠",
+        "deliveryTitle": "Telegram 送达情况",
+        "openAsBroadcast": "作为群发查看"
       },
       "notFound": "未找到模板",
       "noActiveTemplates": "没有活跃的模板",
@@ -3268,7 +3453,7 @@
         "usersOnlineCount": "{{count}} 在线"
       },
       "overview": {
-        "bandwidth": "实时带宽",
+        "bandwidth": "各 inbound 流量",
         "connections": "连接数",
         "cpu": "CPU核心",
         "download": "下载",
@@ -4007,6 +4192,7 @@
       "tabs": {
         "privacy": "隐私",
         "offer": "条款",
+        "recurrent": "定期付款",
         "rules": "规则",
         "faq": "FAQ"
       },
@@ -4800,40 +4986,48 @@
     },
     "activateButton": "激活",
     "activateCodePlaceholder": "输入礼物代码",
-    "activatedBy": "由 {{name}} 激活",
+    "activatedBy": "由 {{username}} 激活",
     "activateDescription": "输入您收到的礼物代码以激活订阅",
     "activatedGiftsTitle": "已激活的礼物",
     "activateError": "激活礼物失败",
     "activateSelfError": "您不能激活自己的礼物",
     "activateSuccess": "礼物已激活！",
-    "activateSuccessDesc": "订阅已添加到您的账户",
+    "activateSuccessDesc": "{{tariff}}：已为您的订阅添加 {{days}} 天",
     "activateTitle": "激活礼物",
     "activeGiftsTitle": "活跃的礼物",
     "codeLabel": "礼物代码",
     "codeReadyTitle": "您的礼物代码已就绪",
     "copyMessage": "复制消息",
     "daysShort": "天",
-    "deviceCount": "设备数",
+    "deviceCount": "{{count}} 台设备",
     "devicesShort": "台",
     "gbShort": "GB",
     "myGiftsEmpty": "暂无礼物",
-    "myGiftsEmptyDesc": "您发送或收到的礼物将显示在这里",
+    "myGiftsEmptyDesc": "为好友购买礼物，或激活已收到的兑换码",
     "pageTitle": "礼物",
     "receivedGiftsTitle": "已收到的礼物",
     "selectPeriod": "选择时长",
     "selectTariff": "选择套餐",
-    "sentTo": "已发送给 {{name}}",
+    "sentTo": "已发送给 {{recipient}}",
     "shareGift": "分享礼物",
-    "shareModalActivateVia": "通过以下方式激活",
+    "shareModalActivateVia": "通过机器人激活：",
     "shareModalActivateViaCabinet": "通过个人中心",
-    "shareText": "我为您准备了一份 Bedolaga VPN 礼物：{{code}}",
+    "shareText": "我给你准备了一份 Bedolaga VPN 礼物，在这里激活它：",
     "shareToastCopied": "链接已复制",
     "statusActivated": "已激活",
     "statusAvailable": "可激活",
     "tabActivate": "激活",
     "tabBuy": "购买",
     "tabMyGifts": "我的礼物",
-    "unlimitedTraffic": "无限流量"
+    "unlimitedTraffic": "无限流量",
+    "qrHint": "扫描以激活礼物",
+    "scanButton": "📷 扫描二维码",
+    "scanInProgress": "扫描中…",
+    "scanCancel": "停止扫描",
+    "scanDescription": "将摄像头对准礼物二维码",
+    "scanNotRecognized": "该二维码中没有礼物码",
+    "scanError": "扫描失败",
+    "scanNoCamera": "摄像头不可用 — 请手动输入代码"
   },
   "news": {
     "title": "新闻与更新",
@@ -4902,5 +5096,10 @@
     "empty": "您还没有订阅",
     "emptyDesc": "选择套餐以开始使用",
     "title": "我的订阅"
+  },
+  "footer": {
+    "offer": "公开要约",
+    "privacy": "隐私政策",
+    "recurrent": "定期付款"
   }
 }
