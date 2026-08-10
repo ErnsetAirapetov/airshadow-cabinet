@@ -3,6 +3,7 @@ import { useSearchParams, useNavigate } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
+import { QRCodeSVG } from 'qrcode.react';
 import { giftApi } from '../api/gift';
 import { brandingApi, type TelegramWidgetConfig } from '../api/branding';
 import { Spinner } from '@/components/ui/Spinner';
@@ -120,6 +121,14 @@ function CodeOnlySuccessState({
         </p>
         <p className="select-all font-mono text-lg font-bold text-accent-400">{giftCode}</p>
       </div>
+
+      {/* QR — получателю проще отсканировать, чем копировать ссылку.
+          Кодируем bot-ссылку, если она есть: активация в боте — основной путь,
+          иначе ссылку кабинета. */}
+      <div className="flex w-full flex-col items-center gap-2 rounded-xl border border-dark-700/30 bg-white p-4">
+        <QRCodeSVG value={botLink ?? cabinetLink} size={180} level="M" includeMargin={false} />
+      </div>
+      <p className="-mt-3 text-xs text-dark-400">{t('gift.qrHint', 'Scan to activate the gift')}</p>
 
       {/* Share message preview */}
       <div className="w-full rounded-xl border border-dark-700/30 bg-dark-800/40 p-4 text-left">

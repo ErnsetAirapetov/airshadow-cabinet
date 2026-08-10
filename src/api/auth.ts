@@ -18,12 +18,14 @@ export const authApi = {
     initData: string,
     campaignSlug?: string | null,
     referralCode?: string | null,
+    acceptedLegalDocuments?: string[],
   ): Promise<AuthResponse> => {
     const response = await apiClient.post<AuthResponse>('/cabinet/auth/telegram', {
       init_data: initData,
       campaign_slug: campaignSlug || undefined,
       referral_code: referralCode || undefined,
       yandex_cid: getYandexCid() || undefined,
+      accepted_legal_documents: acceptedLegalDocuments,
     });
     return response.data;
   },
@@ -40,12 +42,14 @@ export const authApi = {
     },
     campaignSlug?: string | null,
     referralCode?: string | null,
+    acceptedLegalDocuments?: string[],
   ): Promise<AuthResponse> => {
     const response = await apiClient.post<AuthResponse>('/cabinet/auth/telegram/widget', {
       ...data,
       campaign_slug: campaignSlug || undefined,
       referral_code: referralCode || undefined,
       yandex_cid: getYandexCid() || undefined,
+      accepted_legal_documents: acceptedLegalDocuments,
     });
     return response.data;
   },
@@ -54,12 +58,14 @@ export const authApi = {
     idToken: string,
     campaignSlug?: string | null,
     referralCode?: string | null,
+    acceptedLegalDocuments?: string[],
   ): Promise<AuthResponse> => {
     const response = await apiClient.post<AuthResponse>('/cabinet/auth/telegram/oidc', {
       id_token: idToken,
       campaign_slug: campaignSlug || undefined,
       referral_code: referralCode || undefined,
       yandex_cid: getYandexCid() || undefined,
+      accepted_legal_documents: acceptedLegalDocuments,
     });
     return response.data;
   },
@@ -115,6 +121,7 @@ export const authApi = {
     language?: string;
     referral_code?: string;
     campaign_slug?: string;
+    accepted_legal_documents?: string[];
   }): Promise<RegisterResponse> => {
     const response = await apiClient.post<RegisterResponse>(
       '/cabinet/auth/email/register/standalone',

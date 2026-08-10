@@ -4,14 +4,20 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import {
   promoOffersApi,
-  PromoOfferBroadcastRequest,
+  type PromoOfferBroadcastRequest,
   TARGET_SEGMENTS,
-  TargetSegment,
+  type TargetSegment,
   OFFER_TYPE_CONFIG,
-  OfferType,
+  type OfferType,
 } from '../api/promoOffers';
-import { adminUsersApi, UserListItem } from '../api/adminUsers';
+import { adminBroadcastsApi } from '../api/adminBroadcasts';
+import { adminUsersApi, type UserListItem } from '../api/adminUsers';
 import { AdminBackButton } from '../components/admin';
+import {
+  BroadcastDeliveryStats,
+  BroadcastStatusBadge,
+} from '../components/broadcasts/BroadcastDeliveryStats';
+import { broadcastPollInterval } from '../utils/broadcastStatus';
 import {
   SendIcon,
   CheckIcon,
@@ -43,12 +49,34 @@ export default function AdminPromoOfferSend() {
     title: string;
     message: string;
     isSuccess: boolean;
+    broadcastId?: number | null;
   } | null>(null);
 
   // Query templates
   const { data: templatesData, isLoading } = useQuery({
     queryKey: ['admin-promo-templates'],
     queryFn: promoOffersApi.getTemplates,
+  });
+
+  // Recipient counts per segment — админ видит охват до отправки
+  const { data: segmentsData } = useQuery({
+    queryKey: ['admin-promo-segments'],
+    queryFn: promoOffersApi.getSegments,
+    staleTime: 60000,
+  });
+
+  const segmentCounts = new Map(
+    (segmentsData?.segments || []).map((segment) => [segment.key, segment.count]),
+  );
+  const selectedSegmentCount = segmentCounts.get(selectedTarget);
+
+  // Delivery progress of the offer we have just sent
+  const broadcastId = result?.broadcastId ?? null;
+  const { data: delivery } = useQuery({
+    queryKey: ['admin', 'broadcasts', 'detail', broadcastId],
+    queryFn: async () => adminBroadcastsApi.get(broadcastId as number),
+    enabled: broadcastId !== null,
+    refetchInterval: (query) => broadcastPollInterval(query.state.data?.status),
   });
 
   const templates = templatesData?.items || [];
@@ -102,6 +130,7 @@ export default function AdminPromoOfferSend() {
     mutationFn: promoOffersApi.broadcastOffer,
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['admin-promo-logs'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'broadcasts'] });
 
       let message = t('admin.promoOffers.result.offersCreated', { count: data.created_offers });
       if (data.notifications_sent > 0 || data.notifications_failed > 0) {
@@ -121,6 +150,7 @@ export default function AdminPromoOfferSend() {
         title: t('admin.promoOffers.result.sentTitle'),
         message,
         isSuccess: true,
+        broadcastId: data.broadcast_id,
       });
     },
     onError: (error: unknown) => {
@@ -182,7 +212,7 @@ export default function AdminPromoOfferSend() {
   if (result) {
     return (
       <div className="animate-fade-in">
-        <div className="mx-auto max-w-md py-12 text-center">
+        <div className="mx-auto max-w-2xl py-12 text-center">
           <div
             className={`mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full ${
               result.isSuccess ? 'bg-success-500/20' : 'bg-error-500/20'
@@ -196,6 +226,33 @@ export default function AdminPromoOfferSend() {
           </div>
           <h3 className="mb-2 text-lg font-semibold text-dark-100">{result.title}</h3>
           <p className="mb-6 whitespace-pre-wrap text-dark-400">{result.message}</p>
+
+          {/* Прогресс доставки в Telegram: сколько дошло, кто заблокировал бота */}
+          {delivery && (
+            <div className="mb-6 space-y-4 text-left">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium text-dark-300">
+                  {t('admin.promoOffers.result.deliveryTitle')}
+                </span>
+                <BroadcastStatusBadge status={delivery.status} />
+              </div>
+              <BroadcastDeliveryStats
+                status={delivery.status}
+                progressPercent={delivery.progress_percent}
+                totalCount={delivery.total_count}
+                sentCount={delivery.sent_count}
+                blockedCount={delivery.blocked_count}
+                failedCount={delivery.failed_count}
+              />
+              <button
+                onClick={() => navigate(`/admin/broadcasts/${delivery.id}`)}
+                className="text-sm text-accent-400 transition-colors hover:text-accent-300"
+              >
+                {t('admin.promoOffers.result.openAsBroadcast')}
+              </button>
+            </div>
+          )}
+
           <div className="flex justify-center gap-3">
             <button
               onClick={() => navigate('/admin/promo-offers')}
@@ -324,17 +381,30 @@ export default function AdminPromoOfferSend() {
             </div>
 
             {sendMode === 'segment' ? (
-              <select
-                value={selectedTarget}
-                onChange={(e) => setSelectedTarget(e.target.value as TargetSegment)}
-                className="input"
-              >
-                {Object.entries(TARGET_SEGMENTS).map(([key, labelKey]) => (
-                  <option key={key} value={key}>
-                    {t(labelKey)}
-                  </option>
-                ))}
-              </select>
+              <>
+                <select
+                  value={selectedTarget}
+                  onChange={(e) => setSelectedTarget(e.target.value as TargetSegment)}
+                  className="input"
+                >
+                  {Object.entries(TARGET_SEGMENTS).map(([key, labelKey]) => {
+                    const count = segmentCounts.get(key);
+                    return (
+                      <option key={key} value={key}>
+                        {count === undefined
+                          ? t(labelKey)
+                          : `${t(labelKey)} — ${count} ${t('admin.broadcasts.recipients')}`}
+                      </option>
+                    );
+                  })}
+                </select>
+                {selectedSegmentCount !== undefined && (
+                  <div className="mt-2 text-sm text-dark-400">
+                    {t('admin.broadcasts.willBeSent')}:{' '}
+                    <strong className="text-accent-400">{selectedSegmentCount}</strong>
+                  </div>
+                )}
+              </>
             ) : (
               <div ref={searchRef} className="relative">
                 {selectedUser ? (

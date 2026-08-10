@@ -1,10 +1,18 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { uiLocale } from '@/utils/uiLocale';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams, Link } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { giftApi } from '../api/gift';
+import {
+  canUseTelegramScanner,
+  loadHtml5Qrcode,
+  parseGiftCode,
+  scanWithTelegram,
+  type Html5QrcodeInstance,
+} from '@/utils/qrScanner';
 import { brandingApi, type TelegramWidgetConfig } from '../api/branding';
 import type {
   GiftConfig,
@@ -74,7 +82,7 @@ function isGiftActivated(gift: SentGift): boolean {
 function formatGiftDate(dateStr: string | null): string {
   if (!dateStr) return '';
   const date = new Date(dateStr);
-  return date.toLocaleDateString(navigator.language || 'ru-RU', {
+  return date.toLocaleDateString(uiLocale(), {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -742,6 +750,82 @@ function ActivateTabContent({ initialCode }: { initialCode?: string | null }) {
     if (initialCode) setCode(initialCode);
   }, [initialCode]);
   const [activateError, setActivateError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const scannerRef = useRef<Html5QrcodeInstance | null>(null);
+
+  const stopScan = useCallback(() => {
+    if (scannerRef.current) {
+      scannerRef.current
+        .stop()
+        .catch(() => undefined)
+        .finally(() => {
+          scannerRef.current?.clear();
+          scannerRef.current = null;
+        });
+    }
+    setScanning(false);
+  }, []);
+
+  // Веб-сканер держит камеру: гасим его при уходе с вкладки/размонтировании,
+  // иначе индикатор камеры остаётся гореть.
+  useEffect(() => stopScan, [stopScan]);
+
+  const applyScannedCode = useCallback(
+    (decoded: string) => {
+      const parsed = parseGiftCode(decoded);
+      if (!parsed) {
+        setActivateError(t('gift.scanNotRecognized'));
+        return;
+      }
+      setCode(parsed);
+      setActivateError(null);
+    },
+    [t],
+  );
+
+  const handleScan = useCallback(async () => {
+    setActivateError(null);
+
+    if (canUseTelegramScanner()) {
+      try {
+        const decoded = await scanWithTelegram(
+          t('gift.scanDescription'),
+          (v) => parseGiftCode(v) !== null,
+        );
+        if (decoded) applyScannedCode(decoded);
+      } catch {
+        setActivateError(t('gift.scanError'));
+      }
+      return;
+    }
+
+    const Html5Qrcode = await loadHtml5Qrcode();
+    if (!Html5Qrcode) {
+      setActivateError(t('gift.scanNoCamera'));
+      return;
+    }
+
+    setScanning(true);
+    const scanner = new Html5Qrcode('gift-qr-reader');
+    scannerRef.current = scanner;
+    const config = { fps: 10, qrbox: { width: 220, height: 220 } };
+    const onDecoded = (decoded: string) => {
+      if (parseGiftCode(decoded) === null) return;
+      stopScan();
+      applyScannedCode(decoded);
+    };
+    try {
+      await scanner.start({ facingMode: 'environment' }, config, onDecoded, () => undefined);
+    } catch {
+      try {
+        await scanner.start({ facingMode: 'user' }, config, onDecoded, () => undefined);
+      } catch {
+        setActivateError(t('gift.scanNoCamera'));
+        scannerRef.current = null;
+        setScanning(false);
+      }
+    }
+  }, [applyScannedCode, stopScan, t]);
 
   const activateMutation = useMutation({
     mutationFn: (giftCode: string) => giftApi.activateGiftCode(giftCode),
@@ -809,6 +893,32 @@ function ActivateTabContent({ initialCode }: { initialCode?: string | null }) {
           className="w-full rounded-2xl border border-dark-700/50 bg-dark-800/50 px-6 py-4 text-center font-mono text-sm text-dark-50 placeholder-dark-500 outline-none transition-colors focus:border-accent-500/50 focus:ring-1 focus:ring-accent-500/25"
           aria-label={t('gift.activateTitle')}
         />
+
+        {/* Скан QR: в Telegram — нативный сканер (в WebView камера через
+            getUserMedia работает ненадёжно), в вебе — html5-qrcode. */}
+        <button
+          type="button"
+          onClick={handleScan}
+          disabled={scanning}
+          className="mt-3 w-full rounded-2xl border border-dark-700/50 px-6 py-3 text-sm font-medium text-dark-200 transition-colors hover:bg-dark-800/50 disabled:opacity-50"
+        >
+          {scanning ? t('gift.scanInProgress') : t('gift.scanButton')}
+        </button>
+
+        {/* Контейнер веб-сканера: html5-qrcode рендерит превью камеры внутрь */}
+        <div
+          id="gift-qr-reader"
+          className={cn('mt-3 overflow-hidden rounded-2xl', !scanning && 'hidden')}
+        />
+        {scanning && (
+          <button
+            type="button"
+            onClick={stopScan}
+            className="mt-2 w-full rounded-2xl border border-dark-700/50 px-6 py-2 text-xs text-dark-400 transition-colors hover:bg-dark-800/50"
+          >
+            {t('gift.scanCancel')}
+          </button>
+        )}
       </div>
 
       {/* Error */}

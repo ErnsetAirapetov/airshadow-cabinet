@@ -6,6 +6,7 @@ import {
   retrieveLaunchParams,
 } from '@telegram-apps/sdk-react';
 import { blockButtonClass } from './blocks/buttonStyles';
+import { loadHtml5Qrcode, type Html5QrcodeInstance } from '@/utils/qrScanner';
 
 const TG_MOBILE_PLATFORMS = new Set(['ios', 'android', 'android_x', 'ios_x']);
 
@@ -19,22 +20,10 @@ function isTelegramMobile(): boolean {
 }
 
 const HAPP_TV_API = 'https://check.happ.su/sendtv';
-const HTML5_QRCODE_CDN = 'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js';
 
 interface Props {
   subscriptionUrl: string;
   isLight: boolean;
-}
-
-interface Html5QrcodeInstance {
-  start: (
-    cameraIdOrConfig: { facingMode: string } | string,
-    config: { fps: number; qrbox: { width: number; height: number } },
-    onSuccess: (decoded: string) => void,
-    onError: () => void,
-  ) => Promise<void>;
-  stop: () => Promise<void>;
-  clear: () => void;
 }
 
 export default function TvQuickConnect({ subscriptionUrl, isLight }: Props) {
@@ -158,24 +147,16 @@ export default function TvQuickConnect({ subscriptionUrl, isLight }: Props) {
       return;
     }
 
-    // Browser fallback (Mac/iOS Safari, desktop Chrome): html5-qrcode
-    type WindowWithHtml5 = Window & { Html5Qrcode?: new (id: string) => Html5QrcodeInstance };
-    const w = window as WindowWithHtml5;
-    if (!w.Html5Qrcode) {
-      const script = document.createElement('script');
-      script.src = HTML5_QRCODE_CDN;
-      document.head.appendChild(script);
-      await new Promise<void>((resolve, reject) => {
-        script.onload = () => resolve();
-        script.onerror = () => reject();
-      }).catch(() => undefined);
-    }
-    if (!w.Html5Qrcode) {
+    // Browser fallback (Mac/iOS Safari, desktop Chrome): html5-qrcode.
+    // Загрузка вынесена в общий хелпер — он подключает скрипт с проверкой
+    // целостности (SRI), чтобы подмена на стороне CDN не исполнилась в кабинете.
+    const Html5Qrcode = await loadHtml5Qrcode();
+    if (!Html5Qrcode) {
       showToast(t('subscription.tvQuickConnect.noCamera'), 'error');
       return;
     }
     setScanning(true);
-    const scanner = new w.Html5Qrcode('tv-qr-reader');
+    const scanner = new Html5Qrcode('tv-qr-reader');
     scannerRef.current = scanner;
     const config = { fps: 10, qrbox: { width: 220, height: 220 } };
     try {
