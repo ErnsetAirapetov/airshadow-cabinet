@@ -436,8 +436,7 @@
       "qrTitle": "کد QR اشتراک",
       "qrScanHint": "برای اتصال با دوربین اسکن کنید",
       "qrButton": "کد QR",
-      "openQr": "باز کردن کد QR",
-      "platformLabel": "پلتفرم"
+      "openQr": "باز کردن کد QR"
     },
     "additionalOptions": {
       "title": "گزینه‌های اضافی",

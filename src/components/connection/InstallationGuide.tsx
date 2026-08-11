@@ -215,10 +215,8 @@ export default function InstallationGuide({
 
   return (
     <div className="space-y-6 pb-6">
-      {/* Header + platform dropdown. Переключатель платформы переносится на свою
-          строку на узких экранах: в один ряд с заголовком и кнопками он его
-          сплющивал до многоточия. */}
-      <div className="flex flex-wrap items-center gap-3">
+      {/* Header + platform dropdown */}
+      <div className="flex items-center gap-3">
         {!isTelegramWebApp && (
           <button
             onClick={onGoBack}
@@ -228,7 +226,7 @@ export default function InstallationGuide({
             <BackIcon className="h-6 w-6" />
           </button>
         )}
-        <h2 className="min-w-0 flex-1 truncate text-lg font-bold text-dark-100">
+        <h2 className="flex-1 text-lg font-bold text-dark-100">
           {getBaseTranslation('installationGuideHeader', 'subscription.connection.title')}
         </h2>
         {appConfig.subscriptionUrl && onOpenQR && (
@@ -258,52 +256,43 @@ export default function InstallationGuide({
           </button>
         )}
         {availablePlatforms.length > 1 && (
-          // Подпись к селекту: без неё элемент читался как декоративный бейдж
-          // с названием ОС, а не как переключатель платформы.
-          <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
-            <span className="whitespace-nowrap text-xs font-medium text-dark-400">
-              {t('subscription.connection.platformLabel', 'Платформа')}
-            </span>
-            <div className="relative flex items-center">
-              {currentPlatformSvg && (
-                <div
-                  className="pointer-events-none absolute left-3 z-10 h-5 w-5 text-dark-400 [&>svg]:h-full [&>svg]:w-full"
-                  dangerouslySetInnerHTML={{ __html: currentPlatformSvg }}
-                />
-              )}
-              <select
-                value={currentPlatformKey || ''}
-                onChange={(e) => {
-                  const newPlatform = e.target.value;
-                  setActivePlatformKey(newPlatform);
-                  const data = appConfig.platforms[newPlatform] as
-                    | RemnawavePlatformData
-                    | undefined;
-                  if (data?.apps?.length) {
-                    // Keep the user's current app (by name) if it also exists on the
-                    // new platform; only fall back to featured/first otherwise.
-                    const app =
-                      data.apps.find((a) => a.name === selectedApp?.name) ||
-                      data.apps.find((a) => a.featured) ||
-                      data.apps[0];
-                    if (app) setSelectedApp(app);
-                  }
-                }}
-                className={`appearance-none rounded-xl border py-2 pr-8 text-sm font-medium outline-none transition-colors ${
-                  isLight
-                    ? 'border-dark-700/60 bg-white/80 text-dark-200 shadow-sm hover:border-dark-600'
-                    : 'border-dark-700 bg-dark-800 text-dark-200 hover:border-dark-600'
-                } ${currentPlatformSvg ? 'pl-10' : 'pl-4'}`}
-              >
-                {availablePlatforms.map((p) => (
-                  <option key={p} value={p}>
-                    {getPlatformDisplayName(p)}
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute right-2.5 text-dark-400">
-                <ChevronIcon className="h-4 w-4" />
-              </div>
+          <div className="relative flex items-center">
+            {currentPlatformSvg && (
+              <div
+                className="pointer-events-none absolute left-3 z-10 h-5 w-5 text-dark-400 [&>svg]:h-full [&>svg]:w-full"
+                dangerouslySetInnerHTML={{ __html: currentPlatformSvg }}
+              />
+            )}
+            <select
+              value={currentPlatformKey || ''}
+              onChange={(e) => {
+                const newPlatform = e.target.value;
+                setActivePlatformKey(newPlatform);
+                const data = appConfig.platforms[newPlatform] as RemnawavePlatformData | undefined;
+                if (data?.apps?.length) {
+                  // Keep the user's current app (by name) if it also exists on the
+                  // new platform; only fall back to featured/first otherwise.
+                  const app =
+                    data.apps.find((a) => a.name === selectedApp?.name) ||
+                    data.apps.find((a) => a.featured) ||
+                    data.apps[0];
+                  if (app) setSelectedApp(app);
+                }
+              }}
+              className={`appearance-none rounded-xl border py-2 pr-8 text-sm font-medium outline-none transition-colors ${
+                isLight
+                  ? 'border-dark-700/60 bg-white/80 text-dark-200 shadow-sm hover:border-dark-600'
+                  : 'border-dark-700 bg-dark-800 text-dark-200 hover:border-dark-600'
+              } ${currentPlatformSvg ? 'pl-10' : 'pl-4'}`}
+            >
+              {availablePlatforms.map((p) => (
+                <option key={p} value={p}>
+                  {getPlatformDisplayName(p)}
+                </option>
+              ))}
+            </select>
+            <div className="pointer-events-none absolute right-2.5 text-dark-400">
+              <ChevronIcon className="h-4 w-4" />
             </div>
           </div>
         )}

@@ -436,8 +436,7 @@
       "qrTitle": "订阅二维码",
       "qrScanHint": "使用相机扫描以连接",
       "qrButton": "二维码",
-      "openQr": "打开二维码",
-      "platformLabel": "平台"
+      "openQr": "打开二维码"
     },
     "additionalOptions": {
       "title": "附加选项",

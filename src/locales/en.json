@@ -512,8 +512,7 @@
       "qrTitle": "Subscription QR Code",
       "qrScanHint": "Scan to connect",
       "qrButton": "QR Code",
-      "openQr": "Open QR code",
-      "platformLabel": "Platform"
+      "openQr": "Open QR code"
     },
     "myDevices": "My Devices",
     "noDevices": "No connected devices",
