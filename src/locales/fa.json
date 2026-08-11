@@ -254,6 +254,7 @@
   "dashboard": {
     "title": "داشبورد",
     "welcome": "خوش آمدید، {{name}}!",
+    "welcomeGreeting": "خوش آمدید،",
     "welcomeNoName": "خوش آمدید!",
     "yourSubscription": "اشتراک شما",
     "quickActions": "دسترسی سریع",
@@ -435,7 +436,8 @@
       "qrTitle": "کد QR اشتراک",
       "qrScanHint": "برای اتصال با دوربین اسکن کنید",
       "qrButton": "کد QR",
-      "openQr": "باز کردن کد QR"
+      "openQr": "باز کردن کد QR",
+      "platformLabel": "پلتفرم"
     },
     "additionalOptions": {
       "title": "گزینه‌های اضافی",
@@ -973,6 +975,8 @@
     "title": "پشتیبانی",
     "newTicket": "تیکت جدید",
     "yourTickets": "تیکت‌های شما",
+    "faqLinkTitle": "پرسش‌های متداول",
+    "faqLinkHint": "شاید پاسخ شما آنجا باشد — پیش از ثبت تیکت ببینید",
     "noTickets": "تیکتی موجود نیست",
     "createTicket": "ایجاد تیکت",
     "subject": "موضوع",

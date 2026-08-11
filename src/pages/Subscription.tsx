@@ -750,12 +750,17 @@ export default function Subscription() {
                       }}
                       aria-hidden="true"
                     />
-                    <span
-                      className="font-mono text-[11px] font-semibold uppercase tracking-widest"
-                      style={{ color: zone.mainHex, transition: 'color 0.6s ease' }}
-                    >
-                      {isUnlimited ? t('dashboard.unlimited') : t(zone.labelKey)}
-                    </span>
+                    {/* «Норма» — слово без информации: зелёная точка и так говорит,
+                        что всё в порядке. Лейбл остаётся там, где он предупреждает
+                        (warning/danger/critical), и для безлимита. */}
+                    {(isUnlimited || zone.zone !== 'normal') && (
+                      <span
+                        className="font-mono text-[11px] font-semibold uppercase tracking-widest"
+                        style={{ color: zone.mainHex, transition: 'color 0.6s ease' }}
+                      >
+                        {isUnlimited ? t('dashboard.unlimited') : t(zone.labelKey)}
+                      </span>
+                    )}
                   </div>
 
                   {/* Plan name */}
