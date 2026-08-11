@@ -215,8 +215,10 @@ export default function InstallationGuide({
 
   return (
     <div className="space-y-6 pb-6">
-      {/* Header + platform dropdown */}
-      <div className="flex items-center gap-3">
+      {/* Header + platform dropdown. Переключатель платформы переносится на свою
+          строку на узких экранах: в один ряд с заголовком и кнопками он его
+          сплющивал до многоточия. */}
+      <div className="flex flex-wrap items-center gap-3">
         {!isTelegramWebApp && (
           <button
             onClick={onGoBack}
@@ -258,7 +260,7 @@ export default function InstallationGuide({
         {availablePlatforms.length > 1 && (
           // Подпись к селекту: без неё элемент читался как декоративный бейдж
           // с названием ОС, а не как переключатель платформы.
-          <div className="flex shrink-0 items-center gap-2">
+          <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
             <span className="whitespace-nowrap text-xs font-medium text-dark-400">
               {t('subscription.connection.platformLabel', 'Платформа')}
             </span>
