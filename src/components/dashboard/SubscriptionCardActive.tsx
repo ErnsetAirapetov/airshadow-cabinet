@@ -78,22 +78,9 @@ export default function SubscriptionCardActive({
       {/* ─── Header ─── */}
       <div className="mb-7 flex items-start justify-between">
         <div>
-          {/* Zone indicator */}
+          {/* Индикатор зоны расхода убран — см. комментарий в Subscription.tsx.
+              Остаётся только метка пробного периода. */}
           <div className="mb-1 flex items-center gap-2">
-            <div
-              className="h-2 w-2 rounded-full"
-              style={{
-                background: zone.mainVar,
-                transition: 'background 0.6s ease',
-              }}
-              aria-hidden="true"
-            />
-            <span
-              className="font-mono text-[11px] font-semibold uppercase tracking-widest"
-              style={{ color: zone.mainVar, transition: 'color 0.6s ease' }}
-            >
-              {isUnlimited ? t('dashboard.unlimited') : t(zone.labelKey)}
-            </span>
             {subscription.is_trial && (
               <span className="inline-flex items-center gap-1 rounded-md border border-accent-400/25 bg-accent-400/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-accent-400">
                 <svg

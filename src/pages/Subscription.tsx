@@ -739,24 +739,12 @@ export default function Subscription() {
               {/* ─── Header ─── */}
               <div className="mb-6 flex items-start justify-between">
                 <div>
-                  {/* Zone indicator */}
-                  <div className="mb-1 flex items-center gap-2">
-                    <div
-                      className="h-2 w-2 rounded-full"
-                      style={{
-                        background: zone.mainHex,
-                        boxShadow: `0 0 8px ${zone.mainHex}80`,
-                        transition: 'all 0.6s ease',
-                      }}
-                      aria-hidden="true"
-                    />
-                    <span
-                      className="font-mono text-[11px] font-semibold uppercase tracking-widest"
-                      style={{ color: zone.mainHex, transition: 'color 0.6s ease' }}
-                    >
-                      {isUnlimited ? t('dashboard.unlimited') : t(zone.labelKey)}
-                    </span>
-                  </div>
+                  {/* Индикатор зоны расхода убран целиком — и слово, и точка.
+                      Слово («Норма» / «Умеренный» / «Высокий» / «Критический», плюс
+                      «Безлимит») было третьим способом сказать то же, что «X / Y ГБ»
+                      с полосой ниже, причём самым бедным: ведро без шкалы. Точка без
+                      подписи не объясняет, что означает её цвет, а зона и без неё
+                      красит всю карточку — рамку, полосу, точки устройств, спарклайн. */}
 
                   {/* Plan name */}
                   <h2 className="text-lg font-bold tracking-tight text-dark-50">

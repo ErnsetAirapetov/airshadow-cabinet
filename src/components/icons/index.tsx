@@ -18,6 +18,7 @@ import {
   PiGift,
   PiGlobe,
   PiHardDrives,
+  PiHeadset,
   PiHouse,
   PiInfo,
   PiList,
@@ -190,6 +191,13 @@ export const WalletIcon = ({ className }: IconProps) => (
 
 export const ChatIcon = ({ className }: IconProps) => (
   <PiChatCircle className={cn('h-5 w-5', className)} />
+);
+
+// Навигация в поддержку: гарнитура читается как «живой оператор», тогда как
+// облачко ChatIcon пользователи принимали за чат вообще (с кем — непонятно).
+// ChatIcon остаётся для переписки внутри тикета и пустых состояний.
+export const SupportIcon = ({ className }: IconProps) => (
+  <PiHeadset className={cn('h-5 w-5', className)} />
 );
 
 export const GiftIcon = ({ className }: IconProps) => (
