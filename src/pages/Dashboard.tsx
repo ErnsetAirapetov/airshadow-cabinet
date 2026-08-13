@@ -241,6 +241,14 @@ export default function Dashboard() {
       {/* Pending Gift Activations */}
       {pendingGifts && pendingGifts.length > 0 && <PendingGiftCard gifts={pendingGifts} />}
 
+      {/* Stats Grid */}
+      <StatsGrid
+        balanceRubles={balanceData?.balance_rubles || 0}
+        referralCount={referralInfo?.total_referrals || 0}
+        earningsRubles={referralInfo?.available_balance_rubles || 0}
+        refLoading={refLoading}
+      />
+
       {/* Multi-tariff: show subscription cards (max 3) — только когда подписки
           реально есть. Пустой случай (нет подписок) ведёт блок ниже (триал/покупка),
           иначе кнопка покупки дублировалась. */}
@@ -350,14 +358,6 @@ export default function Dashboard() {
 
       {/* Promo Offers */}
       <PromoOffersSection />
-
-      {/* Stats Grid */}
-      <StatsGrid
-        balanceRubles={balanceData?.balance_rubles || 0}
-        referralCount={referralInfo?.total_referrals || 0}
-        earningsRubles={referralInfo?.available_balance_rubles || 0}
-        refLoading={refLoading}
-      />
 
       {/* Fortune Wheel Banner */}
       {wheelConfig?.is_enabled && (
