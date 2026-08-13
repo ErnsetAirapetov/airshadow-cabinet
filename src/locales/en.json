@@ -398,8 +398,9 @@
     "cta": {
       "expiredHint": "Choose a plan and pay",
       "trialHint": "More traffic and devices",
-      "activeHint": "Renewal and plan change",
-      "renewHint": "Subscription expired — renew to continue using"
+      "renewHint": "Pay for the current plan for a new term",
+      "changeHint": "Move to a different plan",
+      "dailyHint": "Charged daily — no manual renewal needed"
     },
     "connectionInfo": "Connection Info",
     "copyLink": "Copy Link",
