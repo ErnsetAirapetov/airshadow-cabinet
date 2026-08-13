@@ -637,8 +637,9 @@
     "backToList": "返回订阅列表",
     "confirmDelete": "删除订阅？",
     "cta": {
-      "renewHint": "订阅已过期 — 续订以继续使用",
-      "activeHint": "续费和更换套餐",
+      "renewHint": "为当前套餐续费一个新周期",
+      "changeHint": "更换为其他套餐",
+      "dailyHint": "按日扣费，无需手动续订",
       "expiredHint": "选择套餐并付款",
       "trialHint": "更多流量和设备"
     },
