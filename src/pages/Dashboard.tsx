@@ -1,15 +1,13 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '../store/auth';
 import { displayName } from '../utils/displayName';
-import { useBlockingStore } from '../store/blocking';
 import { subscriptionApi } from '../api/subscription';
 import { referralApi } from '../api/referral';
 import { balanceApi } from '../api/balance';
 import { wheelApi } from '../api/wheel';
-import Onboarding, { useOnboarding } from '../components/Onboarding';
 import PromoOffersSection from '../components/PromoOffersSection';
 import NewsSection from '../components/news/NewsSection';
 import SubscriptionCardActive from '../components/dashboard/SubscriptionCardActive';
@@ -29,9 +27,6 @@ export default function Dashboard() {
   const user = useAuthStore((state) => state.user);
   const refreshUser = useAuthStore((state) => state.refreshUser);
   const queryClient = useQueryClient();
-  const { isCompleted: isOnboardingCompleted, complete: completeOnboarding } = useOnboarding();
-  const [showOnboarding, setShowOnboarding] = useState(false);
-  const blockingType = useBlockingStore((state) => state.blockingType);
   const [trialError, setTrialError] = useState<string | null>(null);
 
   // Refresh user data on mount
@@ -203,53 +198,6 @@ export default function Dashboard() {
   const hasActivePaid = (multiSubData?.subscriptions ?? []).some(
     (s) => !s.is_trial && (s.status === 'active' || s.status === 'limited'),
   );
-
-  // Show onboarding for new users after data loads
-  useEffect(() => {
-    if (!isOnboardingCompleted && !subLoading && !refLoading && !blockingType) {
-      const timer = setTimeout(() => setShowOnboarding(true), 500);
-      return () => clearTimeout(timer);
-    }
-  }, [isOnboardingCompleted, subLoading, refLoading, blockingType]);
-
-  const onboardingSteps = useMemo(() => {
-    type Placement = 'top' | 'bottom' | 'left' | 'right';
-    const steps: Array<{
-      target: string;
-      title: string;
-      description: string;
-      placement: Placement;
-    }> = [
-      {
-        target: 'welcome',
-        title: t('onboarding.steps.welcome.title'),
-        description: t('onboarding.steps.welcome.description'),
-        placement: 'bottom',
-      },
-      {
-        target: 'balance',
-        title: t('onboarding.steps.balance.title'),
-        description: t('onboarding.steps.balance.description'),
-        placement: 'bottom',
-      },
-    ];
-
-    if (subscription?.subscription_url) {
-      steps.splice(1, 0, {
-        target: 'connect-devices',
-        title: t('onboarding.steps.connectDevices.title'),
-        description: t('onboarding.steps.connectDevices.description'),
-        placement: 'bottom',
-      });
-    }
-
-    return steps;
-  }, [t, subscription]);
-
-  const handleOnboardingComplete = () => {
-    completeOnboarding();
-    setShowOnboarding(false);
-  };
 
   const userName = displayName(user);
 
@@ -429,15 +377,6 @@ export default function Dashboard() {
 
       {/* News Section */}
       <NewsSection />
-
-      {/* Onboarding Tutorial */}
-      {showOnboarding && (
-        <Onboarding
-          steps={onboardingSteps}
-          onComplete={handleOnboardingComplete}
-          onSkip={handleOnboardingComplete}
-        />
-      )}
     </div>
   );
 }
