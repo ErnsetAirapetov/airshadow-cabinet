@@ -9,17 +9,23 @@ import { referralApi } from '../api/referral';
 import { balanceApi } from '../api/balance';
 import { wheelApi } from '../api/wheel';
 import PromoOffersSection from '../components/PromoOffersSection';
-import NewsSection from '../components/news/NewsSection';
+// Лента новостей снята с главной по #22 — новости переезжают на отдельную
+// страницу /news (задача #10). Импорт закомментирован вместе с рендером ниже,
+// чтобы вернуть одним движением, когда страница появится.
+// import NewsSection from '../components/news/NewsSection';
 import SubscriptionCardActive from '../components/dashboard/SubscriptionCardActive';
 import SubscriptionCardExpired from '../components/dashboard/SubscriptionCardExpired';
 import TrialOfferCard from '../components/dashboard/TrialOfferCard';
 import StatsGrid from '../components/dashboard/StatsGrid';
 import { giftApi } from '../api/gift';
-import { promoApi } from '../api/promo';
+// promoApi нужен только для чипа промо-группы, который отключён ниже по #22.
+// import { promoApi } from '../api/promo';
 import PendingGiftCard from '../components/dashboard/PendingGiftCard';
 import SubscriptionListCard from '../components/subscription/SubscriptionListCard';
 import { API } from '../config/constants';
-import { ChevronRightIcon, StarIcon } from '@/components/icons';
+// StarIcon использовался только в чипе промо-группы (см. #22) — вернуть в этот
+// импорт вместе с раскомментированием блока ниже.
+import { ChevronRightIcon } from '@/components/icons';
 
 export default function Dashboard() {
   const { t } = useTranslation();
@@ -93,12 +99,16 @@ export default function Dashboard() {
     retry: false,
   });
 
-  const { data: promoGroupData } = useQuery({
-    queryKey: ['promo-group-discounts'],
-    queryFn: promoApi.getGroupDiscounts,
-    staleTime: 60_000,
-    retry: false,
-  });
+  // Промо-группа и строка «Ваша подписка» скрыты по решению владельца (#22).
+  // Запрос закомментирован вместе с рендером ниже — лишний сетевой вызов не
+  // нужен, пока блок выключен. Вернуть: раскомментировать этот useQuery,
+  // импорт promoApi, StarIcon и JSX-блок в шапке главной.
+  // const { data: promoGroupData } = useQuery({
+  //   queryKey: ['promo-group-discounts'],
+  //   queryFn: promoApi.getGroupDiscounts,
+  //   staleTime: 60_000,
+  //   retry: false,
+  // });
 
   const activateTrialMutation = useMutation({
     mutationFn: () => subscriptionApi.activateTrial(),
@@ -220,7 +230,11 @@ export default function Dashboard() {
             {t('dashboard.welcomeNoName')}
           </h1>
         )}
-        <div className="mt-1 flex flex-wrap items-center gap-2">
+        {/* Строка «Ваша подписка» и чип промо-группы скрыты по решению
+            владельца (#22) — на стенде чип показывал «Базовый юзер» на любом
+            состоянии подписки. Вернуть: раскомментировать блок и связанный
+            useQuery (promoGroupData) выше, а также импорт promoApi и StarIcon. */}
+        {/* <div className="mt-1 flex flex-wrap items-center gap-2">
           <p className="text-dark-400">{t('dashboard.yourSubscription')}</p>
           {promoGroupData?.group_name && (
             <span
@@ -235,7 +249,7 @@ export default function Dashboard() {
               <span className="truncate">{promoGroupData.group_name}</span>
             </span>
           )}
-        </div>
+        </div> */}
       </div>
 
       {/* Pending Gift Activations */}
@@ -375,8 +389,11 @@ export default function Dashboard() {
         </Link>
       )}
 
-      {/* News Section */}
-      <NewsSection />
+      {/* Лента новостей снята с главной (#22) — новости переезжают на
+          отдельную страницу /news (#10). До появления страницы лента
+          недоступна — это осознанный промежуточный шаг. Вернуть:
+          раскомментировать импорт NewsSection выше и рендер здесь. */}
+      {/* <NewsSection /> */}
     </div>
   );
 }
