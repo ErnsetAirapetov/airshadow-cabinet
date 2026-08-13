@@ -1661,7 +1661,7 @@ export default function Subscription() {
       )}
 
       {/* Purchase / Renewal CTA */}
-      <PurchaseCTAButton subscription={subscription} isMultiTariff={isMultiTariff} />
+      <PurchaseCTAButton subscription={subscription} />
 
       {/* Delete expired subscription */}
       {isMultiTariff &&
