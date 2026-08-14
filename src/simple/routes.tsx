@@ -1,6 +1,9 @@
 import type { ComponentType } from 'react';
-import { matchPath } from 'react-router';
 import { useUiMode } from './mode';
+import { SimpleDashboard } from './pages/Dashboard';
+import { matchSimpleRoute, type SimpleRoute } from './routeMatch';
+
+export type { SimpleRoute } from './routeMatch';
 
 /**
  * Реестр простых страниц.
@@ -18,32 +21,26 @@ import { useUiMode } from './mode';
  * Храним КОМПОНЕНТ, а не готовый элемент: элемент, созданный на уровне модуля,
  * имеет постоянную референсную идентичность, из-за чего React бейлаутит поддерево
  * и странице нельзя передать ни ключ, ни собственный boundary.
+ *
+ * ⚠️ Страницы импортируются СТАТИЧЕСКИ: простой слой держим в основном бандле,
+ * `lazy(() => import(...))` здесь запрещён — иначе на каждой навигации мелькает
+ * заглушка загрузчика (третье правило против мерцания в каноне).
  */
-export type SimpleRoute = {
-  path: string;
-  component: ComponentType;
-};
-
 export const simpleRoutes: SimpleRoute[] = [
   // ⚠️ Путь пишется БУКВА В БУКВУ как в App.tsx: сторож покрытия сравнивает
   // строки, а у апстрима параметры зовутся `:subscriptionId`, `:methodId`,
   // `:slug`. Запись `/subscriptions/:id` уронит npm test, хотя в рантайме
   // matchPath сработала бы.
   //
-  // Страницы добавляются задачами милстоуна [M1-E05], по одной за раз.
-  // Пустой реестр — рабочее состояние: режим переключается, подменять нечего,
-  // весь кабинет отдаётся апстримными страницами.
+  // ⚠️ Путь пишется строковым литералом в одну строку: сторож в
+  // `routes.test.tsx` читает этот файл текстом (импортировать реестр он не
+  // может — вместе с ним подтянулись бы страницы и весь граф приложения).
+  // Собранный из переменной путь сторож не увидит.
+  //
+  // Страницы добавляются задачами милстоуна [M1-E05], по одной за раз. Пути,
+  // которых здесь нет, отдаются апстримными страницами.
+  { path: '/', component: SimpleDashboard },
 ];
-
-/** Чистая часть — вынесена, чтобы её можно было проверить тестом без реестра. */
-export function matchSimpleRoute(routes: SimpleRoute[], pathname: string): SimpleRoute | null {
-  for (const route of routes) {
-    if (matchPath({ path: route.path, end: true }, pathname)) {
-      return route;
-    }
-  }
-  return null;
-}
 
 export function resolveSimpleRoute(pathname: string): SimpleRoute | null {
   return matchSimpleRoute(simpleRoutes, pathname);

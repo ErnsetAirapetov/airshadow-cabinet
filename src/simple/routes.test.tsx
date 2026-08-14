@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { matchSimpleRoute, simpleRoutes, type SimpleRoute } from './routes';
+import { matchSimpleRoute, type SimpleRoute } from './routeMatch';
 
 const Stub = () => null;
 
@@ -9,6 +9,25 @@ const routes: SimpleRoute[] = [
   { path: '/subscriptions', component: Stub },
   { path: '/subscriptions/:id', component: Stub },
 ];
+
+/**
+ * ⚠️ Реестр читается ТЕКСТОМ, а не импортом.
+ *
+ * `routes.tsx` статически импортирует простые страницы (ленивая загрузка слою
+ * запрещена каноном), а те тянут api, store и platform — все через alias `@/`,
+ * которого нет в `vitest.config.ts`. Конфиг апстримный: добавить туда alias
+ * значит завести ещё один вечно конфликтующий файл, ради теста этого не делаем.
+ * Разбор текстом — тот же приём, которым ниже читается `App.tsx`.
+ *
+ * Цена приёма: путь, собранный из переменной, сторож не увидит. Поэтому в
+ * `routes.tsx` стоит требование писать путь строковым литералом, а проверка
+ * «разбор удался» ниже ловит случай, когда регулярка перестала находить хоть
+ * что-нибудь.
+ */
+const routesSource = readFileSync('src/simple/routes.tsx', 'utf8');
+const registeredPaths = [...routesSource.matchAll(/^\s*\{\s*path:\s*'([^']+)'/gm)].map(
+  (match) => match[1],
+);
 
 describe('matchSimpleRoute', () => {
   it('корень совпадает точно и не ловит остальные пути', () => {
@@ -30,11 +49,31 @@ describe('matchSimpleRoute', () => {
   it('пустой реестр не подменяет ничего', () => {
     expect(matchSimpleRoute([], '/')).toBeNull();
   });
+});
 
-  it('боевой реестр пуст: каркас ещё не подменяет страниц', () => {
-    // Тест-сторож. Когда появится первая простая страница, он упадёт и заставит
-    // осознанно обновить ожидание, а не забыть про него.
-    expect(simpleRoutes).toHaveLength(0);
+describe('состав реестра', () => {
+  it('боевой реестр подменяет главную', () => {
+    // Сторож состава. Раньше здесь стояло ожидание пустого реестра — каркас не
+    // подменял ничего; первая простая страница (задача #27) его уронила, как и
+    // было задумано. Дальше список растёт задачами милстоуна [M1-E05], и каждая
+    // новая страница обязана появиться здесь осознанно.
+    expect(registeredPaths).toEqual(['/']);
+  });
+
+  it('пути в реестре не повторяются', () => {
+    // Дубль пути не сломал бы ничего заметно: сработала бы первая запись, а
+    // вторая молча не рендерилась бы никогда.
+    expect(registeredPaths).toHaveLength(new Set(registeredPaths).size);
+  });
+
+  it('разбор поймал ВСЕ записи реестра, а не часть', () => {
+    // Слабое место текстового разбора: путь, записанный константой или
+    // шаблонной строкой, регулярка не увидит и сторож покрытия молча его
+    // пропустит. Записей в реестре ровно столько, сколько компонентов, поэтому
+    // расхождение этих двух чисел и есть признак пропуска.
+    const componentEntries = routesSource.match(/^\s*\{[^}]*component:/gm) ?? [];
+
+    expect(registeredPaths).toHaveLength(componentEntries.length);
   });
 });
 
@@ -65,10 +104,12 @@ describe('покрытие шва', () => {
     expect(protectedPaths.has('/privacy')).toBe(false);
   });
 
+  it('разбор реестра удался — иначе сторож сверял бы пустоту', () => {
+    expect(registeredPaths.length).toBeGreaterThan(0);
+  });
+
   it('каждый путь реестра ведёт на маршрут под ProtectedRoute', () => {
-    const uncovered = simpleRoutes
-      .map((route) => route.path)
-      .filter((path) => !protectedPaths.has(path));
+    const uncovered = registeredPaths.filter((path) => !protectedPaths.has(path));
 
     // Пусто — значит ни одна простая страница не зарегистрирована в никуда.
     expect(uncovered).toEqual([]);
