@@ -22,6 +22,9 @@ function lazyWithRetry<T extends ComponentType<unknown>>(factory: () => Promise<
 }
 import { useBlockingStore } from './store/blocking';
 import Layout from './components/layout/Layout';
+// Простой режим. Единственный апстримный файл, которому разрешено импортировать
+// из src/simple/ — см. docs/architecture/two-modes.md.
+import { ModeAffordance, SimpleShell, useSimpleOverride } from './simple';
 import PageLoader from './components/common/PageLoader';
 import {
   MaintenanceScreen,
@@ -173,6 +176,11 @@ function ProtectedRoute({
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isLoading = useAuthStore((state) => state.isLoading);
   const location = useLocation();
+  // Шов двух режимов — единственное место подмены страниц во всём приложении.
+  // Хук вызывается ДО ранних возвратов (иначе нарушится порядок хуков), а решение
+  // принимается ДО рендера: апстримная страница не должна отрисоваться, чтобы
+  // через кадр быть заменённой простой. Канон — docs/architecture/two-modes.md.
+  const simplePage = useSimpleOverride(location.pathname);
 
   if (isLoading) {
     return <PageLoader variant="dark" />;
@@ -181,6 +189,12 @@ function ProtectedRoute({
   if (!isAuthenticated) {
     saveReturnUrl();
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  // Гарды авторизации выше отработали одинаково для обоих режимов — простые
+  // страницы защищены тем же кодом, что апстримные, отдельного гарда нет.
+  if (simplePage) {
+    return withLayout ? <SimpleShell>{simplePage}</SimpleShell> : <>{simplePage}</>;
   }
 
   return withLayout ? <Layout>{children}</Layout> : <>{children}</>;
@@ -263,6 +277,9 @@ function App() {
       {/* Живёт над <Routes>: анимация фона не перезапускается при навигации */}
       <BackgroundHost />
       <BlockingOverlay />
+      {/* Возврат из экспертного режима в простой. Рисуется только в экспертном:
+          в простом этот пункт живёт в бургер-меню SimpleShell. */}
+      <ModeAffordance />
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<Login mode="login" />} />
