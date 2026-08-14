@@ -13,7 +13,6 @@ import { getGlassColors } from '../../utils/glassTheme';
 import { HoverBorderGradient } from '../ui/hover-border-gradient';
 import { CalendarIcon, RefreshIcon } from '@/components/icons';
 import { useHaptic } from '../../platform';
-import { resolveSubscriptionCta } from '../subscription/purchaseCta';
 import type { Subscription } from '../../types';
 
 interface SubscriptionCardActiveProps {
@@ -52,11 +51,6 @@ export default function SubscriptionCardActive({
 
   const formattedDate = new Date(subscription.end_date).toLocaleDateString(uiLocale());
   const daysLeft = subscription.days_left;
-  // Маршрут кнопки решает общий хелпер (см. purchaseCta.ts): продление
-  // недоступно для триала, суточного тарифа и подписки без id — тогда
-  // ведём в витрину тарифов вместо тупиковой страницы продления.
-  const ctaActions = resolveSubscriptionCta(subscription);
-  const daysLeftHref = ctaActions.find((action) => action.kind === 'renew')?.to ?? ctaActions[0].to;
 
   // Sparkline placeholder data (hidden until API provides daily usage)
   const dailyUsage: number[] = [];
@@ -84,9 +78,22 @@ export default function SubscriptionCardActive({
       {/* ─── Header ─── */}
       <div className="mb-7 flex items-start justify-between">
         <div>
-          {/* Индикатор зоны расхода убран — см. комментарий в Subscription.tsx.
-              Остаётся только метка пробного периода. */}
+          {/* Zone indicator */}
           <div className="mb-1 flex items-center gap-2">
+            <div
+              className="h-2 w-2 rounded-full"
+              style={{
+                background: zone.mainVar,
+                transition: 'background 0.6s ease',
+              }}
+              aria-hidden="true"
+            />
+            <span
+              className="font-mono text-[11px] font-semibold uppercase tracking-widest"
+              style={{ color: zone.mainVar, transition: 'color 0.6s ease' }}
+            >
+              {isUnlimited ? t('dashboard.unlimited') : t(zone.labelKey)}
+            </span>
             {subscription.is_trial && (
               <span className="inline-flex items-center gap-1 rounded-md border border-accent-400/25 bg-accent-400/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-accent-400">
                 <svg
@@ -285,11 +292,8 @@ export default function SubscriptionCardActive({
           </div>
         </Link>
 
-        {/* Days remaining — clickable: renew for a paid subscription, or
-            move to the purchase showcase when leaving a trial (a trial has
-            nothing to "renew"). */}
-        <Link
-          to={daysLeftHref}
+        {/* Days remaining */}
+        <div
           className="flex-1 rounded-[14px] p-3.5 transition-colors duration-300"
           style={{
             background: g.innerBg,
@@ -328,11 +332,11 @@ export default function SubscriptionCardActive({
               {t('subscription.daysShort')}
             </span>
           </div>
-        </Link>
+        </div>
       </div>
 
       {/* ─── Traffic Refresh ─── */}
-      <div className="mb-5 flex items-center px-0.5">
+      <div className="mb-5 flex items-center justify-between px-0.5">
         <button
           onClick={() => refreshTrafficMutation.mutate()}
           disabled={refreshTrafficMutation.isPending || trafficRefreshCooldown > 0}
@@ -344,6 +348,12 @@ export default function SubscriptionCardActive({
           />
           {trafficRefreshCooldown > 0 ? `${trafficRefreshCooldown}s` : t('common.refresh')}
         </button>
+        <Link
+          to={`/subscriptions/${subscription.id}`}
+          className="text-[11px] font-medium text-dark-50/25 transition-colors hover:text-dark-50/40"
+        >
+          {t('dashboard.viewSubscription')} &rarr;
+        </Link>
       </div>
 
       {/* ─── Sparkline ─── */}
