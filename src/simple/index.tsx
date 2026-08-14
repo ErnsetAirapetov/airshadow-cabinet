@@ -8,7 +8,6 @@
  */
 import './i18n';
 
-export { ModeAffordance } from './ModeAffordance';
 export { useUiMode, useModeStore, type UiMode } from '@/store/mode';
 export { useSimpleOverride } from './routes';
 export { SimpleShell } from './components/layout/SimpleShell';

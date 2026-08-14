@@ -24,7 +24,7 @@ import { useBlockingStore } from './store/blocking';
 import Layout from './components/layout/Layout';
 // Простой режим. Единственный апстримный файл, которому разрешено импортировать
 // из src/simple/ — см. docs/architecture/two-modes.md.
-import { ModeAffordance, SimpleShell, useSimpleOverride } from './simple';
+import { SimpleShell, useSimpleOverride } from './simple';
 import PageLoader from './components/common/PageLoader';
 import {
   MaintenanceScreen,
@@ -286,9 +286,6 @@ function App() {
       {/* Живёт над <Routes>: анимация фона не перезапускается при навигации */}
       <BackgroundHost />
       <BlockingOverlay />
-      {/* Возврат из экспертного режима в простой. Рисуется только в экспертном:
-          в простом этот пункт живёт в бургер-меню SimpleShell. */}
-      <ModeAffordance />
       <Routes>
         {/* Public routes */}
         <Route path="/login" element={<Login mode="login" />} />
