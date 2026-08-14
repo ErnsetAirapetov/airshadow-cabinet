@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { initDataUser } from '@telegram-apps/sdk-react';
-// Иконка возврата в простой режим (#41). Импортируется прямо здесь, без обёртки
+// Иконка выхода в простой режим (#41, #48). Импортируется прямо здесь, без обёртки
 // в `@/components/icons` — тот каталог апстримный, лишний файл в нём означал бы
 // лишний конфликт на каждом синке ради одной картинки.
 import { PiArrowsInSimple } from 'react-icons/pi';
@@ -92,7 +92,7 @@ export function AppHeader({
   );
   const { toggleTheme, isDark } = useTheme();
   const { haptic, platform } = usePlatform();
-  // Кнопка видна только в экспертном режиме (#41, канон two-modes.md).
+  // Выход в простой режим виден только в экспертном (#41, канон two-modes.md).
   const setMode = useModeStore((state) => state.setMode);
   const mode = useModeStore((state) => state.mode);
   const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);
@@ -243,21 +243,6 @@ export function AppHeader({
                   title="Search (⌘K)"
                 >
                   <SearchIcon className="h-5 w-5" />
-                </button>
-              )}
-
-              {/* Кнопка видна только в экспертном режиме (#41, канон two-modes.md). */}
-              {mode === 'expert' && (
-                <button
-                  onClick={() => {
-                    haptic.impact('light');
-                    setMode('simple');
-                  }}
-                  className="rounded-linear-lg border border-dark-700/50 bg-dark-800/50 p-2 text-dark-400 transition-all duration-200 hover:bg-dark-700 hover:text-accent-400"
-                  aria-label="Упрощённый вид"
-                  title="Упрощённый вид"
-                >
-                  <PiArrowsInSimple className="h-5 w-5" />
                 </button>
               )}
 
@@ -423,6 +408,27 @@ export function AppHeader({
                   <UserIcon className="h-5 w-5" />
                   {t('nav.profile')}
                 </Link>
+
+                {/* Выход в простой режим — строкой меню, как в ящике простого
+                    режима (#48). Виден только в экспертном: апстримная шапка
+                    монтируется и в простом режиме, на путях без простой
+                    страницы (#41, #45). Неймспейс подписи написан литералом —
+                    импортировать SIMPLE_NS из src/simple/ апстримному файлу
+                    запрещает гейт границ, а значения он не проверяет. */}
+                {mode === 'expert' && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      haptic.impact('light');
+                      setMode('simple');
+                      setMobileMenuOpen(false);
+                    }}
+                    className="nav-item w-full"
+                  >
+                    <PiArrowsInSimple className="h-5 w-5" />
+                    {t('mode.toSimple', { ns: 'simple' })}
+                  </button>
+                )}
 
                 <button
                   onClick={() => {
