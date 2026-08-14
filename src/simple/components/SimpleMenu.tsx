@@ -2,9 +2,10 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/primitives';
 import { usePlatform } from '@/platform';
+import { useAuthStore } from '@/store/auth';
 import { SIMPLE_NS } from '../i18n';
 import { useModeStore } from '../mode';
-import { ExpandIcon, InfoIcon, UserIcon } from './icons';
+import { ExpandIcon, InfoIcon, LogoutIcon, UserIcon } from './icons';
 
 /**
  * Бургер-меню простого режима: профиль, информация и выход в экспертный режим.
@@ -29,6 +30,7 @@ export function SimpleMenu({
 }) {
   const { t } = useTranslation(SIMPLE_NS);
   const setMode = useModeStore((state) => state.setMode);
+  const logout = useAuthStore((state) => state.logout);
   const { haptic } = usePlatform();
 
   return (
@@ -63,6 +65,24 @@ export function SimpleMenu({
           >
             <ExpandIcon className="h-5 w-5 text-dark-400" />
             {t('mode.toExpert')}
+          </button>
+
+          {/*
+            Выход из аккаунта. В апстриме он живёт только в шапке AppShell, и
+            без этого пункта пользователь простого режима не смог бы выйти,
+            не переключившись в экспертный. Для кабинета с оплатами это дыра,
+            а не упрощение.
+          */}
+          <button
+            type="button"
+            onClick={() => {
+              onOpenChange(false);
+              logout();
+            }}
+            className={`${ROW} text-error-400`}
+          >
+            <LogoutIcon className="h-5 w-5" />
+            {t('nav.logout')}
           </button>
         </div>
       </SheetContent>

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { matchSimpleRoute, simpleRoutes, type SimpleRoute } from './routes';
 
@@ -34,5 +35,42 @@ describe('matchSimpleRoute', () => {
     // Тест-сторож. Когда появится первая простая страница, он упадёт и заставит
     // осознанно обновить ожидание, а не забыть про него.
     expect(simpleRoutes).toHaveLength(0);
+  });
+});
+
+/**
+ * Шов подмены живёт в `ProtectedRoute`. Путь, который идёт мимо него —
+ * публичный или админский, — молча не подменится: ни ошибки сборки, ни
+ * исключения. Этот сторож ловит такую запись в `npm test`.
+ */
+describe('покрытие шва', () => {
+  const appSource = readFileSync('src/App.tsx', 'utf8');
+
+  /** Пути, чей `<Route>` содержит `<ProtectedRoute>` — то есть покрытые швом. */
+  const protectedPaths = new Set<string>();
+  for (const chunk of appSource.split('<Route').slice(1)) {
+    const path = chunk.match(/path="([^"]+)"/)?.[1];
+    if (path && chunk.includes('<ProtectedRoute')) {
+      protectedPaths.add(path);
+    }
+  }
+
+  it('разбор App.tsx удался — иначе сторож молча пропускал бы всё', () => {
+    // Без этой проверки сломанный разбор дал бы пустое множество, и следующий
+    // тест проходил бы всегда, ничего не охраняя.
+    expect(protectedPaths.size).toBeGreaterThan(20);
+    expect(protectedPaths.has('/')).toBe(true);
+    expect(protectedPaths.has('/balance')).toBe(true);
+    // Публичный маршрут под шов не попадает.
+    expect(protectedPaths.has('/privacy')).toBe(false);
+  });
+
+  it('каждый путь реестра ведёт на маршрут под ProtectedRoute', () => {
+    const uncovered = simpleRoutes
+      .map((route) => route.path)
+      .filter((path) => !protectedPaths.has(path));
+
+    // Пусто — значит ни одна простая страница не зарегистрирована в никуда.
+    expect(uncovered).toEqual([]);
   });
 });

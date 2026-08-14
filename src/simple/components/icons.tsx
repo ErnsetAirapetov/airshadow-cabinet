@@ -73,6 +73,14 @@ export const InfoIcon = ({ className }: IconProps) => (
   </svg>
 );
 
+export const LogoutIcon = ({ className }: IconProps) => (
+  <svg {...base} className={className}>
+    <path d="M15 4h3a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-3" />
+    <path d="M10 8.5 6.5 12l3.5 3.5" />
+    <path d="M6.5 12H15" />
+  </svg>
+);
+
 export const ExpandIcon = ({ className }: IconProps) => (
   <svg {...base} className={className}>
     <path d="M4 9V5a1 1 0 0 1 1-1h4" />

@@ -24,7 +24,7 @@ import { useBlockingStore } from './store/blocking';
 import Layout from './components/layout/Layout';
 // Простой режим. Единственный апстримный файл, которому разрешено импортировать
 // из src/simple/ — см. docs/architecture/two-modes.md.
-import { ModeAffordance, SimpleShell, useSeamCoverageWarning, useSimpleOverride } from './simple';
+import { ModeAffordance, SimpleShell, useSimpleOverride } from './simple';
 import PageLoader from './components/common/PageLoader';
 import {
   MaintenanceScreen,
@@ -277,10 +277,6 @@ function LegacySubscriptionRedirect() {
 
 function App() {
   useAnalyticsCounters();
-  // dev-предупреждение, если простая страница зарегистрирована на маршрут, до
-  // которого шов не дотягивается (публичный или админский). Молчаливый промах
-  // в фундаменте недопустим.
-  useSeamCoverageWarning();
   // Pulls site-verification tokens (Antilopay apay-tag etc.) from the bot
   // backend and injects matching <meta> tags into document.head.
   useSiteVerification();

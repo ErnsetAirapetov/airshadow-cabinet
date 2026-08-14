@@ -22,7 +22,7 @@ const ITEMS = [
   { path: '/support', labelKey: 'nav.support', Icon: SupportIcon },
 ];
 
-export function SimpleBottomNav() {
+export function SimpleBottomNav({ hidden = false }: { hidden?: boolean }) {
   const { t } = useTranslation(SIMPLE_NS);
   const location = useLocation();
   const { haptic } = usePlatform();
@@ -33,7 +33,12 @@ export function SimpleBottomNav() {
   return (
     <nav
       aria-label={t('nav.primary')}
-      className="fixed z-50 mx-auto max-w-md border border-dark-700/30 bg-dark-900/95 backdrop-blur-linear"
+      className={cn(
+        'fixed z-50 mx-auto max-w-md border border-dark-700/30 bg-dark-900/95 backdrop-blur-linear transition-opacity duration-200',
+        // Прячем при открытой клавиатуре: «Поддержка» с текстовым полем — пункт
+        // этого же меню, и панель встала бы поверх поля ввода.
+        hidden ? 'pointer-events-none opacity-0' : 'opacity-100',
+      )}
       style={{
         bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
         left: '16px',

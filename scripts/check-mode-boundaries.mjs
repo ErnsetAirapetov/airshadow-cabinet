@@ -51,6 +51,11 @@ const INFRA_ALLOWLIST = new Set([
   'src/components/WebSocketNotifications',
   'src/components/CampaignBonusNotifier',
   'src/components/SuccessNotificationModal',
+  // BackgroundHost рендерит фон, только пока есть хоть один потребитель, а
+  // регистрирует потребителя единственный вызов useBackgroundConsumer() — из
+  // AppShell. Без него простой режим остался бы на голом фоне, что выглядит
+  // как сломанная страница, а не как упрощение.
+  'src/components/backgrounds/BackgroundHost',
 ]);
 
 const IMPORT_RE = /(?:^|\n)\s*(?:import|export)[\s\S]*?from\s*['"]([^'"]+)['"]/g;
@@ -69,7 +74,18 @@ function walk(dir, out = []) {
   return out;
 }
 
-function sources(code) {
+/**
+ * Комментарии выбрасываем до поиска импортов.
+ *
+ * Иначе фраза «так делать нельзя: import('../pages/X')» в докстринге валит
+ * сборку — а в этом репозитории докстринги длинные и как раз объясняют запреты.
+ */
+function stripComments(code) {
+  return code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
+function sources(rawCode) {
+  const code = stripComments(rawCode);
   const found = [];
   for (const re of [IMPORT_RE, BARE_IMPORT_RE, DYNAMIC_IMPORT_RE]) {
     re.lastIndex = 0;
@@ -115,14 +131,18 @@ for (const file of walk(SRC)) {
       continue;
     }
 
-    const targetInSimple = target.startsWith(SIMPLE_DIR);
+    // ⚠️ Точное совпадение отдельно от префикса: `@/simple` разрешается в
+    // `src/simple` БЕЗ слэша, и сравнение только по префиксу его пропускало.
+    // Это самая ходовая форма — `App.tsx` сам пишет `from './simple'`, а
+    // `src/simple/index.tsx` заведён именно как единственная точка входа.
+    const targetInSimple = target === 'src/simple' || target.startsWith(SIMPLE_DIR);
 
     if (inSimple) {
       // Внутри своего дерева ходим куда угодно.
       if (targetInSimple) {
         continue;
       }
-      if (target.startsWith('src/pages/')) {
+      if (target === 'src/pages' || target.startsWith('src/pages/')) {
         violations.push({
           path,
           source,

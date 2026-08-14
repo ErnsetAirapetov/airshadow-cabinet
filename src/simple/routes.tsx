@@ -1,5 +1,5 @@
-import { type ComponentType, useEffect } from 'react';
-import { matchPath, useLocation } from 'react-router';
+import type { ComponentType } from 'react';
+import { matchPath } from 'react-router';
 import { useUiMode } from './mode';
 
 /**
@@ -50,37 +50,19 @@ export function resolveSimpleRoute(pathname: string): SimpleRoute | null {
  * `/buy/success/:token`, `/coupon/:token`) и админские (у них свой `AdminRoute`).
  *
  * Запись такого пути в реестр не даст ни ошибки сборки, ни исключения — она
- * просто не сработает. Молчаливый промах в фундаменте недопустим, поэтому в dev
- * о нём кричим. Что делать, когда простому режиму реально понадобится публичная
- * страница, — см. docs/architecture/two-modes.md.
+ * просто не сработает. Молчаливый промах в фундаменте недопустим, поэтому за
+ * этим следит тест `routes.test.tsx`: он сверяет реестр с маршрутами `App.tsx`
+ * и падает в `npm test`.
+ *
+ * Сторожем сделан именно тест, а не предупреждение в консоли: CLAUDE.md
+ * объявляет dev-окружение непригодным («проверяем только сборкой»), а
+ * `build:docker` собирает с `DEV=false` — предупреждение жило бы там, куда
+ * никто не заходит, и стоило бы проду лишних ре-рендеров корня на каждой
+ * навигации.
+ *
+ * Что делать, когда простому режиму реально понадобится публичная страница, —
+ * см. docs/architecture/two-modes.md.
  */
-const seamRanFor = new Set<string>();
-
-export function markSeamRan(pathname: string) {
-  if (import.meta.env.DEV) {
-    seamRanFor.add(pathname);
-  }
-}
-
-export function useSeamCoverageWarning() {
-  const { pathname } = useLocation();
-  const mode = useUiMode();
-
-  useEffect(() => {
-    if (!import.meta.env.DEV || mode !== 'simple') {
-      return;
-    }
-    // Эффект родителя выполняется после рендера и эффектов детей, поэтому к
-    // этому моменту шов уже отработал — если ему было где отработать.
-    if (resolveSimpleRoute(pathname) && !seamRanFor.has(pathname)) {
-      console.error(
-        `[два режима] Для «${pathname}» зарегистрирована простая страница, но шов не сработал: ` +
-          'этот маршрут идёт мимо ProtectedRoute (публичный или админский). ' +
-          'Подмена молча не произошла. См. docs/architecture/two-modes.md',
-      );
-    }
-  }, [pathname, mode]);
-}
 
 /**
  * Возвращает компонент простой страницы для текущего пути или `null`, если её
@@ -97,10 +79,5 @@ export function useSimpleOverride(pathname: string): ComponentType | null {
     return null;
   }
 
-  const route = resolveSimpleRoute(pathname);
-  if (route) {
-    markSeamRan(pathname);
-  }
-
-  return route?.component ?? null;
+  return resolveSimpleRoute(pathname)?.component ?? null;
 }
