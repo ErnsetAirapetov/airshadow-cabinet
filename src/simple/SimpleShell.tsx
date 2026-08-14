@@ -6,7 +6,8 @@ import { PromptDialogHost } from '@/components/PromptDialogHost';
 import SuccessNotificationModal from '@/components/SuccessNotificationModal';
 import WebSocketNotifications from '@/components/WebSocketNotifications';
 import { useBackgroundConsumer } from '@/components/backgrounds/BackgroundHost';
-import { SimpleBottomNav } from './components/SimpleBottomNav';
+import { useTelegramSDK } from '@/hooks/useTelegramSDK';
+import { NAV_BOTTOM_OFFSET, NAV_HEIGHT, SimpleBottomNav } from './components/SimpleBottomNav';
 import { SimpleMenu } from './components/SimpleMenu';
 import { MenuIcon } from './components/icons';
 import { SIMPLE_NS } from './i18n';
@@ -42,6 +43,16 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const { t } = useTranslation(SIMPLE_NS);
   const location = useLocation();
+  const { isFullscreen, safeAreaInset, contentSafeAreaInset, platform } = useTelegramSDK();
+
+  // В полноэкранном режиме Telegram рисует поверх контента свои кнопки (закрыть
+  // и меню) — в правом верхнем углу, ровно там, где стоит бургер. `env()` их не
+  // отдаёт, он знает только про чёлку устройства, поэтому берём инсеты из SDK и
+  // добавляем высоту телеграмных контролов. Приём и числа — из AppHeader.
+  const safeTop = Math.max(safeAreaInset.top, contentSafeAreaInset.top);
+  const headerPaddingTop = isFullscreen
+    ? `${safeTop + (platform === 'android' ? 48 : 45)}px`
+    : 'calc(16px + env(safe-area-inset-top, 0px))';
 
   // Регистрируем потребителя фона — иначе BackgroundHost ничего не рисует.
   useBackgroundConsumer();
@@ -81,9 +92,7 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
     <div className="min-h-viewport">
       <header
         className="flex items-center justify-end px-4"
-        // Полноэкранный режим Telegram включается сам на мобильном, и без
-        // безопасной зоны кнопка уезжает под системную шапку или чёлку.
-        style={{ paddingTop: 'calc(16px + env(safe-area-inset-top, 0px))' }}
+        style={{ paddingTop: headerPaddingTop }}
       >
         <button
           type="button"
@@ -96,13 +105,15 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
       </header>
 
       {/*
-        Отступ снизу считается той же формулой, что и позиция панели, плюс её
-        высота — иначе запас держится на совпадении и съедается первым же
-        увеличением системного шрифта.
+        Отступ снизу — от той же геометрии, что и сама панель, плюс зазор.
+        Числа берутся из SimpleBottomNav, поэтому панель и отступ правятся
+        вместе, а не расходятся молча.
       */}
       <main
         className="mx-auto max-w-3xl px-4 py-6"
-        style={{ paddingBottom: 'calc(102px + env(safe-area-inset-bottom, 0px))' }}
+        style={{
+          paddingBottom: `calc(${NAV_BOTTOM_OFFSET + NAV_HEIGHT + 16}px + env(safe-area-inset-bottom, 0px))`,
+        }}
       >
         {children}
       </main>

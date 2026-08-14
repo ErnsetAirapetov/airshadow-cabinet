@@ -15,6 +15,14 @@ import { HomeIcon, SubscriptionIcon, SupportIcon, WalletIcon } from './icons';
  * на десктопе своя боковая панель). Своей боковой панели у простого режима нет
  * и не будет, поэтому на широком экране прижимаем меню по центру.
  */
+/**
+ * Геометрия панели. Экспортируется, чтобы оболочка считала нижний отступ
+ * контента от тех же чисел, а не от магической константы: иначе панель и
+ * отступ разъедутся при первом же изменении высоты пункта.
+ */
+export const NAV_BOTTOM_OFFSET = 16;
+export const NAV_HEIGHT = 72;
+
 const ITEMS = [
   { path: '/', labelKey: 'nav.dashboard', Icon: HomeIcon },
   { path: '/subscriptions', labelKey: 'nav.subscription', Icon: SubscriptionIcon },
@@ -40,7 +48,7 @@ export function SimpleBottomNav({ hidden = false }: { hidden?: boolean }) {
         hidden ? 'pointer-events-none opacity-0' : 'opacity-100',
       )}
       style={{
-        bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
+        bottom: `calc(${NAV_BOTTOM_OFFSET}px + env(safe-area-inset-bottom, 0px))`,
         left: '16px',
         right: '16px',
         borderRadius: 'var(--bento-radius, 24px)',

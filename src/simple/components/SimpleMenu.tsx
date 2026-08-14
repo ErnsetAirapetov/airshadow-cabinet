@@ -8,7 +8,8 @@ import { useModeStore } from '../mode';
 import { ExpandIcon, InfoIcon, LogoutIcon, UserIcon } from './icons';
 
 /**
- * Бургер-меню простого режима: профиль, информация и выход в экспертный режим.
+ * Бургер-меню простого режима: профиль, информация, переход в экспертный режим
+ * и выход из аккаунта.
  *
  * Юридические документы обязаны оставаться достижимыми — они живут внутри
  * «Информации», поэтому пункт нельзя убирать ради красоты.
@@ -76,6 +77,7 @@ export function SimpleMenu({
           <button
             type="button"
             onClick={() => {
+              haptic.impact('light');
               onOpenChange(false);
               logout();
             }}
