@@ -1,22 +1,26 @@
+import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PiArrowsOutSimple } from 'react-icons/pi';
 import { Link, useLocation } from 'react-router';
 
 import { isLogoPreloaded } from '@/api/branding';
+import { themeColorsApi } from '@/api/themeColors';
 import CampaignBonusNotifier from '@/components/CampaignBonusNotifier';
 import { PromptDialogHost } from '@/components/PromptDialogHost';
 import SuccessNotificationModal from '@/components/SuccessNotificationModal';
 import WebSocketNotifications from '@/components/WebSocketNotifications';
 import { useBackgroundConsumer } from '@/components/backgrounds/BackgroundHost';
 import {
-  ChevronExpandIcon,
   CreditCardIcon,
   HomeIcon,
   InfoIcon,
   LogoutIcon,
+  MoonIcon,
   ShieldIcon,
   SubscriptionIcon,
+  SunIcon,
   SupportIcon,
   UserIcon,
 } from '@/components/icons';
@@ -24,11 +28,13 @@ import { useBranding } from '@/hooks/useBranding';
 import { useHeaderHeight } from '@/hooks/useHeaderHeight';
 import { useScrollRestoration } from '@/hooks/useScrollRestoration';
 import { useTelegramSDK } from '@/hooks/useTelegramSDK';
+import { useTheme } from '@/hooks/useTheme';
 import { cn } from '@/lib/utils';
 import { useHaptic } from '@/platform';
 import { useAuthStore } from '@/store/auth';
-import { SIMPLE_NS } from '../../i18n';
 import { useModeStore } from '@/store/mode';
+import { SIMPLE_NS } from '../../i18n';
+import LanguageSwitcher from '../LanguageSwitcher';
 import { MobileBottomNav } from './MobileBottomNav';
 import { SimpleHeader } from './SimpleHeader';
 
@@ -47,9 +53,15 @@ import { SimpleHeader } from './SimpleHeader';
  *
  *   - фича-флаги навигации (рефералка, колесо, конкурсы, опросы, подарки) —
  *     состав простого режима фиксирован;
- *   - переключатель темы, колокольчик уведомлений, переключатель языка, поиск —
- *     это и есть та перегруженность шапки, от которой уходим;
- *   - в правом углу вместо них ровно два действия: «Все возможности» и выход.
+ *   - колокольчик уведомлений и поиск — это и есть та перегруженность шапки,
+ *     от которой уходим.
+ *
+ * Правый угол десктопной шапки (задача #42): язык, тема, режим, выход. Язык и
+ * тема вернулись из апстрима осознанно — без них человек, зашедший в кабинет с
+ * другим языком аккаунта или со светлой темой, не может это поправить, не уходя
+ * в экспертный режим. Тумблер темы показывается, только если админ включил обе
+ * темы: иначе `useTheme` молча отказывается переключаться, и кнопка выглядит
+ * сломанной.
  *
  * Состав панели — требование владельца: только разрешённые в простом режиме
  * пункты плюс админка администратору.
@@ -65,12 +77,22 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
     useTelegramSDK();
   const { mobile: headerHeight } = useHeaderHeight();
   const haptic = useHaptic();
+  const { toggleTheme, isDark } = useTheme();
 
   const { appName, logoLetter, hasCustomLogo, logoUrl } = useBranding();
   useScrollRestoration();
   // Анимированный фон рендерит BackgroundHost в App (не перемонтируется при
   // смене роута) — здесь только регистрируем, что на этом роуте он нужен.
   useBackgroundConsumer();
+
+  // Видимость тумблера темы. Запрос тот же, что у апстримного AppShell, — и
+  // ключ тот же, поэтому переключение режима не стоит лишнего похода в сеть.
+  const { data: enabledThemes } = useQuery({
+    queryKey: ['enabled-themes'],
+    queryFn: themeColorsApi.getEnabledThemes,
+    staleTime: 1000 * 60 * 5,
+  });
+  const canToggleTheme = enabledThemes?.dark && enabledThemes?.light;
 
   // Полноэкранные поправки — только в мобильном Telegram.
   const isMobileFullscreen = isFullscreen && isMobile;
@@ -229,6 +251,26 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
           </nav>
 
           <div className="flex shrink-0 items-center gap-2 justify-self-end">
+            <LanguageSwitcher />
+            {/* `hidden`, а не условный рендер: разметка кнопки остаётся той же,
+                что у апстрима, и отличие сводится к одному классу. */}
+            <button
+              type="button"
+              onClick={() => {
+                haptic.impact('light');
+                toggleTheme();
+              }}
+              className={cn(
+                'rounded-xl border border-dark-700/50 bg-dark-800/50 p-2 text-dark-400 transition-colors duration-200 hover:bg-dark-700 hover:text-accent-400',
+                !canToggleTheme && 'hidden',
+              )}
+              aria-label={
+                isDark ? t('theme.light') || 'Light mode' : t('theme.dark') || 'Dark mode'
+              }
+              title={isDark ? t('theme.light') || 'Light mode' : t('theme.dark') || 'Dark mode'}
+            >
+              {isDark ? <MoonIcon className="h-5 w-5" /> : <SunIcon className="h-5 w-5" />}
+            </button>
             {/* Режимы в интерфейсе не называем: человек видит обещание «все
                 возможности», а не ярлык «ты новичок». */}
             <button
@@ -239,7 +281,7 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
               }}
               className="flex items-center gap-1.5 rounded-xl border border-dark-700/50 bg-dark-800/50 px-3 py-2 text-[13px] font-medium text-dark-300 transition-colors duration-200 hover:bg-dark-700 hover:text-accent-400"
             >
-              <ChevronExpandIcon className="h-4 w-4" />
+              <PiArrowsOutSimple className="h-4 w-4" />
               {tSimple('mode.toExpert')}
             </button>
             <button
