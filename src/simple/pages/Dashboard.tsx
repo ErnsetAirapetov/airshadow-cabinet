@@ -14,6 +14,7 @@ import { SIMPLE_NS } from '../i18n';
 import {
   resolveDashboardSubscription,
   resolveRenewHref,
+  resolveTrafficHref,
   type SimpleSubscription,
 } from './dashboardState';
 
@@ -153,6 +154,10 @@ export function SimpleDashboard() {
         <ActiveCard subscription={state.subscription} onTap={tap} t={t} />
       )}
 
+      {state.kind === 'limited' && (
+        <LimitedCard subscription={state.subscription} onTap={tap} t={t} />
+      )}
+
       {state.kind === 'expired' && (
         <ExpiredCard subscription={state.subscription} onTap={tap} t={t} />
       )}
@@ -258,13 +263,38 @@ function ActiveCard({ subscription, onTap, t }: CardProps) {
       </div>
 
       {/*
-        Страница подключения сама тянет ссылку и инструкции по параметру `sub`,
-        поэтому кнопке не нужен `subscription_url`: она не пропадает, когда
-        панель отдала подписку без готовой ссылки (у апстрима блок подключения
-        в этом случае исчезает целиком, и человеку некуда нажать).
+        Без ссылки подписки кнопку прячем — как апстрим: панель ещё не выдала
+        ссылку, подключать нечего, и страница подключения показала бы пустоту.
       */}
-      <Link to={`/connection?sub=${subscription.id}`} onClick={onTap} className={ACCENT_BUTTON}>
-        {t('dashboard.connect')}
+      {subscription.hasConnectionLink && (
+        <Link to={`/connection?sub=${subscription.id}`} onClick={onTap} className={ACCENT_BUTTON}>
+          {t('dashboard.connect')}
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Трафик исчерпан. Срок ещё идёт, поэтому дата остаётся на месте, а действие
+ * другое: докупить трафик, а не продлить. Кнопка ведёт на страницу подписки с
+ * пакетами — человек закрывает проблему прямо с главной, не разыскивая, где это
+ * лежит. Ветка повторяет апстримную `SubscriptionCardExpired` при `is_limited`.
+ */
+function LimitedCard({ subscription, onTap, t }: CardProps) {
+  return (
+    <div className="bento-card space-y-4">
+      <div>
+        <span className={CAPTION}>{t('dashboard.subscriptionTitle')}</span>
+        <div className="mt-1 text-xl font-bold text-dark-50">{t('dashboard.limitedTitle')}</div>
+        <p className="mt-1 text-sm text-dark-400">{t('dashboard.limitedHint')}</p>
+        <p className="mt-1 text-sm text-dark-400">
+          {t('dashboard.activeUntil', { date: formatDate(subscription.endDate) })}
+        </p>
+      </div>
+
+      <Link to={resolveTrafficHref(subscription)} onClick={onTap} className={ACCENT_BUTTON}>
+        {t('dashboard.buyTraffic')}
       </Link>
     </div>
   );

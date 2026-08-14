@@ -5,7 +5,11 @@ import type {
   SubscriptionStatusResponse,
   SubscriptionsListResponse,
 } from '@/types';
-import { resolveDashboardSubscription, resolveRenewHref } from './dashboardState';
+import {
+  resolveDashboardSubscription,
+  resolveRenewHref,
+  resolveTrafficHref,
+} from './dashboardState';
 
 /**
  * Вся ветвящаяся логика простой главной живёт в чистом модуле именно ради этих
@@ -172,10 +176,11 @@ describe('resolveDashboardSubscription — одно-тарифный режим'
     ).toBe('expired');
   });
 
-  it('исчерпанный трафик (limited) — подписка ЖИВА: срок ещё идёт', () => {
-    // Апстрим показывает для limited карточку истёкшей, но истечение по сроку и
-    // исчерпание трафика — разные вещи: «действует до» и остаток дней остаются
-    // правдой. Продлевать при этом нечего, поэтому состояние активное.
+  it('исчерпанный трафик (limited) — отдельное состояние, как в апстриме', () => {
+    // Истечение по сроку и исчерпание трафика лечатся разными действиями:
+    // первое — продлением, второе — покупкой пакета трафика. Апстрим их и
+    // разделяет (SubscriptionCardExpired, ветка isLimited), решение владельца —
+    // повторить это в простом режиме: докупить трафик можно прямо с главной.
     expect(
       resolveDashboardSubscription({
         list: list([], false),
@@ -183,7 +188,40 @@ describe('resolveDashboardSubscription — одно-тарифный режим'
         statusLoading: false,
         now: NOW,
       }).kind,
-    ).toBe('active');
+    ).toBe('limited');
+  });
+
+  it('исчерпанный трафик перебивает истечение — действие важнее срока', () => {
+    expect(
+      resolveDashboardSubscription({
+        list: list([], false),
+        status: single(
+          status({ status: 'limited', is_active: false, is_limited: true, is_expired: true }),
+        ),
+        statusLoading: false,
+        now: NOW,
+      }).kind,
+    ).toBe('limited');
+  });
+
+  it('ссылка подписки от панели переносится в состояние', () => {
+    // По ней страница решает, показывать ли кнопку подключения: без ссылки
+    // подключать нечего, и апстрим блок прячет.
+    const withLink = resolveDashboardSubscription({
+      list: list([], false),
+      status: single(status()),
+      statusLoading: false,
+      now: NOW,
+    });
+    const withoutLink = resolveDashboardSubscription({
+      list: list([], false),
+      status: single(status({ subscription_url: null })),
+      statusLoading: false,
+      now: NOW,
+    });
+
+    expect(withLink.kind === 'active' && withLink.subscription.hasConnectionLink).toBe(true);
+    expect(withoutLink.kind === 'active' && withoutLink.subscription.hasConnectionLink).toBe(false);
   });
 });
 
@@ -302,6 +340,17 @@ describe('resolveDashboardSubscription — мультитариф', () => {
     expect(state.kind === 'expired' && state.subscription.daysLeft).toBe(0);
   });
 
+  it('статус limited в списке даёт то же состояние, что и в одно-тарифном', () => {
+    const state = resolveDashboardSubscription({
+      list: list([item({ status: 'limited' })], true),
+      status: undefined,
+      statusLoading: false,
+      now: NOW,
+    });
+
+    expect(state.kind).toBe('limited');
+  });
+
   it('признаки триала и суточного тарифа переносятся из списка', () => {
     const state = resolveDashboardSubscription({
       list: list([item({ is_trial: true, is_daily: true })], true),
@@ -318,13 +367,17 @@ describe('resolveDashboardSubscription — мультитариф', () => {
 });
 
 describe('resolveRenewHref', () => {
-  const sub = (overrides: Partial<Parameters<typeof resolveRenewHref>[0]> = {}) => ({
+  const sub = (
+    overrides: Partial<Parameters<typeof resolveRenewHref>[0]> = {},
+  ): Parameters<typeof resolveRenewHref>[0] => ({
     id: 7,
     endDate: '2026-09-01T00:00:00',
     daysLeft: 18,
     isTrial: false,
     isDaily: false,
     isExpired: false,
+    isLimited: false,
+    hasConnectionLink: true,
     ...overrides,
   });
 
@@ -346,5 +399,23 @@ describe('resolveRenewHref', () => {
 
   it('без id ссылку на продление не собрать — витрина тарифов', () => {
     expect(resolveRenewHref(sub({ id: 0 }))).toBe('/subscription/purchase');
+  });
+
+  it('исчерпанный трафик продлением не лечится — тоже витрина', () => {
+    // Отдельная кнопка «Докупить трафик» ведёт в другое место, см.
+    // resolveTrafficHref: продление срока трафик не вернёт.
+    expect(resolveRenewHref(sub({ isLimited: true, isExpired: true }))).toBe(
+      '/subscription/purchase',
+    );
+  });
+
+  describe('resolveTrafficHref', () => {
+    it('ведёт на страницу подписки, где живут пакеты трафика', () => {
+      expect(resolveTrafficHref(sub({ isLimited: true }))).toBe('/subscriptions/7');
+    });
+
+    it('без id — на список подписок, лишь бы не в никуда', () => {
+      expect(resolveTrafficHref(sub({ id: 0, isLimited: true }))).toBe('/subscriptions');
+    });
   });
 });

@@ -26,12 +26,20 @@ export type SimpleSubscription = {
   isTrial: boolean;
   isDaily: boolean;
   isExpired: boolean;
+  /** Трафик исчерпан: срок ещё идёт, но доступ уже не работает. */
+  isLimited: boolean;
+  /**
+   * Панель отдала ссылку подписки. Без неё апстрим прячет блок подключения —
+   * подключать нечего, пока ссылки нет.
+   */
+  hasConnectionLink: boolean;
 };
 
 export type DashboardSubscriptionState =
   | { kind: 'loading' }
   | { kind: 'none' }
   | { kind: 'active'; subscription: SimpleSubscription }
+  | { kind: 'limited'; subscription: SimpleSubscription }
   | { kind: 'expired'; subscription: SimpleSubscription };
 
 export type DashboardSubscriptionInput = {
@@ -78,10 +86,9 @@ function fromStatus(subscription: Subscription): SimpleSubscription {
     daysLeft: subscription.days_left,
     isTrial: subscription.is_trial,
     isDaily: subscription.is_daily ?? false,
-    // Исчерпанный трафик (`is_limited`) истечением НЕ считаем: срок ещё идёт,
-    // «действует до» и остаток дней остаются правдой. Апстрим показывает для
-    // limited карточку истёкшей — это его решение, у простой главной другое.
     isExpired: subscription.is_expired || subscription.status === 'disabled',
+    isLimited: subscription.is_limited,
+    hasConnectionLink: Boolean(subscription.subscription_url),
   };
 }
 
@@ -93,6 +100,8 @@ function fromListItem(item: SubscriptionListItem, now: Date): SimpleSubscription
     isTrial: item.is_trial,
     isDaily: item.is_daily ?? false,
     isExpired: !LIVE_STATUSES.has(item.status),
+    isLimited: item.status === 'limited',
+    hasConnectionLink: Boolean(item.subscription_url),
   };
 }
 
@@ -171,7 +180,15 @@ export function resolveDashboardSubscription(
   return toState(fromStatus(status.subscription));
 }
 
+/**
+ * ⚠️ Порядок веток повторяет апстрим (`SubscriptionCardExpired`): исчерпанный
+ * трафик перебивает истечение, потому что действие у него другое — докупить
+ * трафик, а не продлить срок.
+ */
 function toState(subscription: SimpleSubscription): DashboardSubscriptionState {
+  if (subscription.isLimited) {
+    return { kind: 'limited', subscription };
+  }
   return subscription.isExpired
     ? { kind: 'expired', subscription }
     : { kind: 'active', subscription };
@@ -191,6 +208,16 @@ function toState(subscription: SimpleSubscription): DashboardSubscriptionState {
  * выходят на платный) и у суточного тарифа (списывается сам) — все они ведут в
  * витрину. Без `id` страницу продления не собрать, поэтому туда же.
  */
+/**
+ * Куда ведёт «Докупить трафик» при исчерпанном лимите — на страницу подписки,
+ * где живут пакеты трафика. Адрес тот же, что у апстримной карточки истёкшей
+ * подписки в ветке `isLimited`: покупка пакета доступна прямо оттуда, и это
+ * ровно то, что человеку нужно сделать, чтобы вернуть доступ.
+ */
+export function resolveTrafficHref(subscription: SimpleSubscription): string {
+  return subscription.id ? `/subscriptions/${subscription.id}` : '/subscriptions';
+}
+
 export function resolveRenewHref(subscription: SimpleSubscription): string {
   if (subscription.isExpired || subscription.isTrial || subscription.isDaily) {
     return PURCHASE_ROUTE;
