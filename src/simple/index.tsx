@@ -11,4 +11,4 @@ import './i18n';
 export { ModeAffordance } from './ModeAffordance';
 export { useUiMode, useModeStore, type UiMode } from './mode';
 export { useSimpleOverride } from './routes';
-export { SimpleShell } from './SimpleShell';
+export { SimpleShell } from './components/layout/SimpleShell';
