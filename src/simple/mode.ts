@@ -20,7 +20,7 @@ const STORAGE_KEY = 'cabinet_ui_mode';
  * Всё в try/catch: в приватном режиме и внутри некоторых webview обращение к
  * localStorage бросает исключение, и падать из-за настройки вида нельзя.
  */
-function readStoredMode(): UiMode {
+export function readStoredMode(): UiMode {
   try {
     return localStorage.getItem(STORAGE_KEY) === 'expert' ? 'expert' : 'simple';
   } catch {

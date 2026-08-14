@@ -9,7 +9,7 @@
     "dev": "vite",
     "build": "node scripts/check-mode-boundaries.mjs && tsc && vite build",
     "check:modes": "node scripts/check-mode-boundaries.mjs",
-    "build:docker": "vite build",
+    "build:docker": "node scripts/check-mode-boundaries.mjs && vite build",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "format": "biome format --write .",

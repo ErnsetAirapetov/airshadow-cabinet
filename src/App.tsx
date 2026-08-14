@@ -24,7 +24,7 @@ import { useBlockingStore } from './store/blocking';
 import Layout from './components/layout/Layout';
 // Простой режим. Единственный апстримный файл, которому разрешено импортировать
 // из src/simple/ — см. docs/architecture/two-modes.md.
-import { ModeAffordance, SimpleShell, useSimpleOverride } from './simple';
+import { ModeAffordance, SimpleShell, useSeamCoverageWarning, useSimpleOverride } from './simple';
 import PageLoader from './components/common/PageLoader';
 import {
   MaintenanceScreen,
@@ -180,7 +180,7 @@ function ProtectedRoute({
   // Хук вызывается ДО ранних возвратов (иначе нарушится порядок хуков), а решение
   // принимается ДО рендера: апстримная страница не должна отрисоваться, чтобы
   // через кадр быть заменённой простой. Канон — docs/architecture/two-modes.md.
-  const simplePage = useSimpleOverride(location.pathname);
+  const SimplePage = useSimpleOverride(location.pathname);
 
   if (isLoading) {
     return <PageLoader variant="dark" />;
@@ -193,8 +193,17 @@ function ProtectedRoute({
 
   // Гарды авторизации выше отработали одинаково для обоих режимов — простые
   // страницы защищены тем же кодом, что апстримные, отдельного гарда нет.
-  if (simplePage) {
-    return withLayout ? <SimpleShell>{simplePage}</SimpleShell> : <>{simplePage}</>;
+  //
+  // LazyPage обязателен: он даёт постраничный ErrorBoundary и Suspense. Без него
+  // исключение в простой странице уходит в app-boundary и роняет всё приложение,
+  // тогда как апстримная страница на том же месте деградирует мягко.
+  if (SimplePage) {
+    const page = (
+      <LazyPage>
+        <SimplePage />
+      </LazyPage>
+    );
+    return withLayout ? <SimpleShell>{page}</SimpleShell> : page;
   }
 
   return withLayout ? <Layout>{children}</Layout> : <>{children}</>;
@@ -268,6 +277,10 @@ function LegacySubscriptionRedirect() {
 
 function App() {
   useAnalyticsCounters();
+  // dev-предупреждение, если простая страница зарегистрирована на маршрут, до
+  // которого шов не дотягивается (публичный или админский). Молчаливый промах
+  // в фундаменте недопустим.
+  useSeamCoverageWarning();
   // Pulls site-verification tokens (Antilopay apay-tag etc.) from the bot
   // backend and injects matching <meta> tags into document.head.
   useSiteVerification();

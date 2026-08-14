@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { matchPath } from 'react-router';
+import { type ComponentType, useEffect } from 'react';
+import { matchPath, useLocation } from 'react-router';
 import { useUiMode } from './mode';
 
 /**
@@ -14,10 +14,14 @@ import { useUiMode } from './mode';
  *
  * Новых путей не заводим. Если тянет добавить `/simple/...` — стоп, это
  * нарушение архитектуры, см. docs/architecture/two-modes.md.
+ *
+ * Храним КОМПОНЕНТ, а не готовый элемент: элемент, созданный на уровне модуля,
+ * имеет постоянную референсную идентичность, из-за чего React бейлаутит поддерево
+ * и странице нельзя передать ни ключ, ни собственный boundary.
  */
 export type SimpleRoute = {
   path: string;
-  element: ReactNode;
+  component: ComponentType;
 };
 
 export const simpleRoutes: SimpleRoute[] = [
@@ -26,8 +30,9 @@ export const simpleRoutes: SimpleRoute[] = [
   // весь кабинет отдаётся апстримными страницами.
 ];
 
-export function resolveSimpleRoute(pathname: string): SimpleRoute | null {
-  for (const route of simpleRoutes) {
+/** Чистая часть — вынесена, чтобы её можно было проверить тестом без реестра. */
+export function matchSimpleRoute(routes: SimpleRoute[], pathname: string): SimpleRoute | null {
+  for (const route of routes) {
     if (matchPath({ path: route.path, end: true }, pathname)) {
       return route;
     }
@@ -35,20 +40,67 @@ export function resolveSimpleRoute(pathname: string): SimpleRoute | null {
   return null;
 }
 
+export function resolveSimpleRoute(pathname: string): SimpleRoute | null {
+  return matchSimpleRoute(simpleRoutes, pathname);
+}
+
 /**
- * Возвращает простую страницу для текущего пути или `null`, если её нет либо
- * пользователь в экспертном режиме.
+ * ⚠️ Шов подмены живёт в `ProtectedRoute`, поэтому покрывает ТОЛЬКО маршруты
+ * под ним. Мимо идут публичные (`/offer`, `/privacy`, `/verify-email`,
+ * `/buy/success/:token`, `/coupon/:token`) и админские (у них свой `AdminRoute`).
+ *
+ * Запись такого пути в реестр не даст ни ошибки сборки, ни исключения — она
+ * просто не сработает. Молчаливый промах в фундаменте недопустим, поэтому в dev
+ * о нём кричим. Что делать, когда простому режиму реально понадобится публичная
+ * страница, — см. docs/architecture/two-modes.md.
+ */
+const seamRanFor = new Set<string>();
+
+export function markSeamRan(pathname: string) {
+  if (import.meta.env.DEV) {
+    seamRanFor.add(pathname);
+  }
+}
+
+export function useSeamCoverageWarning() {
+  const { pathname } = useLocation();
+  const mode = useUiMode();
+
+  useEffect(() => {
+    if (!import.meta.env.DEV || mode !== 'simple') {
+      return;
+    }
+    // Эффект родителя выполняется после рендера и эффектов детей, поэтому к
+    // этому моменту шов уже отработал — если ему было где отработать.
+    if (resolveSimpleRoute(pathname) && !seamRanFor.has(pathname)) {
+      console.error(
+        `[два режима] Для «${pathname}» зарегистрирована простая страница, но шов не сработал: ` +
+          'этот маршрут идёт мимо ProtectedRoute (публичный или админский). ' +
+          'Подмена молча не произошла. См. docs/architecture/two-modes.md',
+      );
+    }
+  }, [pathname, mode]);
+}
+
+/**
+ * Возвращает компонент простой страницы для текущего пути или `null`, если её
+ * нет либо пользователь в экспертном режиме.
  *
  * ⚠️ Вызывать ДО ранних возвратов вызывающего компонента: внутри есть хук.
  * И решение принимается ДО рендера — апстримная страница не должна отрисоваться,
  * чтобы через кадр быть заменённой.
  */
-export function useSimpleOverride(pathname: string): ReactNode | null {
+export function useSimpleOverride(pathname: string): ComponentType | null {
   const mode = useUiMode();
 
   if (mode !== 'simple') {
     return null;
   }
 
-  return resolveSimpleRoute(pathname)?.element ?? null;
+  const route = resolveSimpleRoute(pathname);
+  if (route) {
+    markSeamRan(pathname);
+  }
+
+  return route?.component ?? null;
 }
