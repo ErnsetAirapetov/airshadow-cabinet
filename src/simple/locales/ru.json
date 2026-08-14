@@ -4,16 +4,7 @@
     "toSimple": "Упрощённый вид"
   },
   "nav": {
-    "primary": "Основная навигация",
-    "menu": "Меню",
-    "openMenu": "Открыть меню",
-    "dashboard": "Главная",
-    "subscription": "Подписка",
-    "balance": "Баланс",
-    "support": "Поддержка",
-    "profile": "Профиль",
-    "info": "Информация",
-    "logout": "Выйти"
+    "openMenu": "Открыть меню"
   },
   "dashboard": {
     "greeting": "Добро пожаловать,",
