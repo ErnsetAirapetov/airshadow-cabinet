@@ -27,7 +27,7 @@ import { usePlatform } from '@/platform';
 import { useAuthStore } from '@/store/auth';
 import { displayName } from '@/utils/displayName';
 import { SIMPLE_NS } from '../../i18n';
-import { useModeStore } from '../../mode';
+import { useModeStore } from '@/store/mode';
 
 const FALLBACK_NAME = import.meta.env.VITE_APP_NAME || 'Cabinet';
 const FALLBACK_LOGO = import.meta.env.VITE_APP_LOGO || 'V';

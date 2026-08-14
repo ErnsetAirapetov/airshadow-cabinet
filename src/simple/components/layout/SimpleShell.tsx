@@ -28,7 +28,7 @@ import { cn } from '@/lib/utils';
 import { useHaptic } from '@/platform';
 import { useAuthStore } from '@/store/auth';
 import { SIMPLE_NS } from '../../i18n';
-import { useModeStore } from '../../mode';
+import { useModeStore } from '@/store/mode';
 import { MobileBottomNav } from './MobileBottomNav';
 import { SimpleHeader } from './SimpleHeader';
 

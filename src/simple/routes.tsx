@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { useUiMode } from './mode';
+import { useUiMode } from '@/store/mode';
 import { SimpleDashboard } from './pages/Dashboard';
 import { matchSimpleRoute, type SimpleRoute } from './routeMatch';
 

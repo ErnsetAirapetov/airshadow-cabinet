@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuthStore } from '@/store/auth';
 import { useBlockingStore } from '@/store/blocking';
 import { SIMPLE_NS } from './i18n';
-import { useModeStore, useUiMode } from './mode';
+import { useModeStore, useUiMode } from '@/store/mode';
 
 /**
  * Возврат из экспертного режима в простой.
