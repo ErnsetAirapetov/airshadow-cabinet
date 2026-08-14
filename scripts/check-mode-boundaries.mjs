@@ -46,6 +46,24 @@ const ALIAS = '@/';
  * ⚠️ Именно список, а не дыра в правиле: добавление сюда — осознанное решение,
  * которое видно в дифе. Компоненты с видом сюда не попадают никогда.
  */
+/**
+ * Апстримные каталоги БЕЗ продуктовой семантики — простому режиму открыты
+ * целиком, как `components/primitives`.
+ *
+ * Проверено по импортам (14.08.2026): `components/ui/**` тянет только react,
+ * framer-motion, simplex-noise, `@/lib/utils`, `@/hooks/useAnimationLoop` и
+ * `@/platform`; `components/icons/**` — только `react-icons` и `cn`. Ни api, ни
+ * store, ни доменных типов: это библиотеки формы и картинок, а не интерфейс
+ * экспертного режима. Держать свою копию каждой иконки значило бы разъехаться
+ * с апстримом в мелочах ради нулевой выгоды — тот же довод, по которому общими
+ * сделаны примитивы.
+ *
+ * ⚠️ Продуктовые компоненты сюда не попадают, даже если лежат в тех же папках
+ * рядом: `components/stats/StatCard` скопирован в `src/simple/`, потому что его
+ * соседи по каталогу (`DailyChart`, `PeriodComparison`) — уже интерфейс.
+ */
+const OPEN_DIRS = ['src/components/ui', 'src/components/icons'];
+
 const INFRA_ALLOWLIST = new Set([
   'src/components/PromptDialogHost',
   'src/components/WebSocketNotifications',
@@ -153,9 +171,10 @@ for (const file of walk(SRC)) {
         });
       } else if (
         target.startsWith('src/components/') &&
-        // Точное совпадение — это импорт index-файла примитивов, он же разрешён.
+        // Точное совпадение — это импорт index-файла каталога, он же разрешён.
         target !== 'src/components/primitives' &&
         !target.startsWith('src/components/primitives/') &&
+        !OPEN_DIRS.some((dir) => target === dir || target.startsWith(`${dir}/`)) &&
         !INFRA_ALLOWLIST.has(target)
       ) {
         violations.push({

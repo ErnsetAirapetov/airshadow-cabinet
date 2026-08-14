@@ -1,11 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import type { Subscription, SubscriptionStatusResponse } from '@/types';
-import {
-  resolveDashboardSubscription,
-  resolveLimitedHref,
-  resolveRenewHref,
-} from './dashboardState';
+import { resolveDashboardSubscription, resolveRenewHref } from './dashboardState';
 
 /**
  * Вся ветвящаяся логика простой главной живёт в чистом модуле именно ради этих
@@ -99,26 +95,13 @@ describe('resolveDashboardSubscription — состояния подписки',
     );
   });
 
-  it('активная подписка отдаёт дату, остаток дней и id', () => {
+  it('активная подписка отдаётся карточке как есть, без своего view-типа', () => {
+    // Карточки простого режима — копии апстримных и принимают `Subscription`.
+    // Промежуточный тип означал бы конвертацию туда-обратно на каждой карточке.
     expect(resolve()).toMatchObject({
       kind: 'active',
-      subscription: {
-        id: 7,
-        endDate: '2026-09-01T00:00:00',
-        daysLeft: 18,
-        isTrial: false,
-        isExpired: false,
-        hasConnectionLink: true,
-      },
+      subscription: { id: 7, end_date: '2026-09-01T00:00:00', days_left: 18 },
     });
-  });
-
-  it('остаток дней берётся у бэкенда, а не пересчитывается', () => {
-    // days_left считает бэкенд (app/database/models.py), и он единственный
-    // знает про паузы суточного тарифа. Пересчёт по end_date дал бы своё число.
-    const state = resolve({ status: response(status({ days_left: 3 })) });
-
-    expect(state.kind === 'active' && state.subscription.daysLeft).toBe(3);
   });
 
   it('истёкшая подписка', () => {
@@ -137,9 +120,8 @@ describe('resolveDashboardSubscription — состояния подписки',
 
   it('приостановленная подписка (limited) — отдельное состояние', () => {
     // Отдельное от истечения: срок ещё идёт, дата остаётся правдой, а доступ
-    // не работает. Какое действие предлагать в этом состоянии — открытый
-    // вопрос к владельцу (кнопка докупки трафика снята, см. resolveLimitedHref),
-    // но само состояние существует и путать его с истечением нельзя.
+    // не работает. Апстримная карточка истёкшей подписки различает эти случаи
+    // сама (ветка `isLimited`), поэтому состояние доезжает до неё отдельным.
     expect(
       resolve({
         status: response(status({ status: 'limited', is_active: false, is_limited: true })),
@@ -157,53 +139,36 @@ describe('resolveDashboardSubscription — состояния подписки',
     ).toBe('limited');
   });
 
-  it('ссылка подписки от панели переносится в состояние', () => {
-    // По ней страница решает, показывать ли кнопку подключения: без ссылки
-    // подключать нечего, и апстрим блок прячет.
-    const withoutLink = resolve({ status: response(status({ subscription_url: null })) });
-
-    expect(withoutLink.kind === 'active' && withoutLink.subscription.hasConnectionLink).toBe(false);
-  });
-
-  it('признаки триала и суточного тарифа переносятся из ответа', () => {
-    const state = resolve({ status: response(status({ is_trial: true, is_daily: true })) });
+  it('подписка доезжает целиком — карточке нужны и трафик, и лимит устройств', () => {
+    const state = resolve({ status: response(status({ subscription_url: null })) });
 
     expect(state.kind === 'active' && state.subscription).toMatchObject({
-      isTrial: true,
-      isDaily: true,
+      subscription_url: null,
+      traffic_limit_gb: 100,
+      device_limit: 3,
     });
   });
 });
 
 describe('resolveRenewHref', () => {
-  const sub = (
-    overrides: Partial<Parameters<typeof resolveRenewHref>[0]> = {},
-  ): Parameters<typeof resolveRenewHref>[0] => ({
-    id: 7,
-    endDate: '2026-09-01T00:00:00',
-    daysLeft: 18,
-    isTrial: false,
-    isDaily: false,
-    isExpired: false,
-    isLimited: false,
-    hasConnectionLink: true,
-    ...overrides,
-  });
+  const sub = status;
 
   it('платная живая подписка ведёт на страницу продления', () => {
     expect(resolveRenewHref(sub())).toBe('/subscriptions/7/renew');
   });
 
   it('триал продлевать нечего — витрина тарифов', () => {
-    expect(resolveRenewHref(sub({ isTrial: true }))).toBe('/subscription/purchase');
+    expect(resolveRenewHref(sub({ is_trial: true }))).toBe('/subscription/purchase');
   });
 
   it('суточный тариф списывается сам — витрина тарифов', () => {
-    expect(resolveRenewHref(sub({ isDaily: true }))).toBe('/subscription/purchase');
+    expect(resolveRenewHref(sub({ is_daily: true }))).toBe('/subscription/purchase');
   });
 
   it('истёкшая подписка — витрина тарифов', () => {
-    expect(resolveRenewHref(sub({ isExpired: true }))).toBe('/subscription/purchase');
+    expect(resolveRenewHref(sub({ is_active: false, is_expired: true }))).toBe(
+      '/subscription/purchase',
+    );
   });
 
   it('без id ссылку на продление не собрать — витрина тарифов', () => {
@@ -211,19 +176,9 @@ describe('resolveRenewHref', () => {
   });
 
   it('истёкшая с исчерпанным трафиком — по-прежнему витрина', () => {
-    expect(resolveRenewHref(sub({ isLimited: true, isExpired: true }))).toBe(
+    expect(resolveRenewHref(sub({ is_limited: true, is_expired: true }))).toBe(
       '/subscription/purchase',
     );
-  });
-});
-
-describe('resolveLimitedHref', () => {
-  it('ведёт в витрину тарифов — единственное действие, доступное всегда', () => {
-    // ⚠️ Здесь была ссылка на `/subscriptions/‹id›` под кнопкой «Докупить
-    // трафик». Снята по наблюдению со стенда: блок докупки на странице
-    // подписки у `limited` не отрисовывается, кнопка вела бы в тупик.
-    // Окончательный состав состояния — за владельцем.
-    expect(resolveLimitedHref()).toBe('/subscription/purchase');
   });
 });
 

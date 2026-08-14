@@ -118,7 +118,12 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
         {children}
       </main>
 
-      <SimpleBottomNav hidden={keyboardOpen} />
+      {/*
+        Прячем меню и под клавиатурой, и под открытым бургером: панель висит
+        `fixed` с `z-50` и просвечивала сквозь затемнение шторки (#35).
+        Механизм тот же, что для клавиатуры, — второго изобретать не надо.
+      */}
+      <SimpleBottomNav hidden={keyboardOpen || menuOpen} />
       <SimpleMenu open={menuOpen} onOpenChange={setMenuOpen} />
 
       {/* Инфраструктура, которую в экспертном режиме монтирует AppShell. */}
