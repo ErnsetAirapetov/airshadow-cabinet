@@ -1,14 +1,10 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import type {
-  Subscription,
-  SubscriptionListItem,
-  SubscriptionStatusResponse,
-  SubscriptionsListResponse,
-} from '@/types';
+import type { Subscription, SubscriptionStatusResponse } from '@/types';
 import {
   resolveDashboardSubscription,
+  resolveLimitedHref,
   resolveRenewHref,
-  resolveTrafficHref,
 } from './dashboardState';
 
 /**
@@ -17,8 +13,6 @@ import {
  * (vitest.config.ts, `environment: 'node'`). Значит либо логика вынесена и
  * проверена, либо не проверена вовсе.
  */
-
-const NOW = new Date('2026-08-14T12:00:00Z');
 
 function status(overrides: Partial<Subscription> = {}): Subscription {
   return {
@@ -48,85 +42,65 @@ function status(overrides: Partial<Subscription> = {}): Subscription {
   };
 }
 
-function item(overrides: Partial<SubscriptionListItem> = {}): SubscriptionListItem {
-  return {
-    id: 1,
-    status: 'active',
-    tariff_id: 1,
-    tariff_name: 'Базовый',
-    traffic_limit_gb: 100,
-    traffic_used_gb: 1,
-    device_limit: 3,
-    end_date: '2026-09-01T00:00:00Z',
-    subscription_url: 'https://sub.example/token',
-    subscription_crypto_link: null,
-    is_trial: false,
-    autopay_enabled: false,
-    connected_squads: null,
-    ...overrides,
-  };
-}
-
-const single = (subscription: Subscription | null): SubscriptionStatusResponse => ({
+const response = (subscription: Subscription | null): SubscriptionStatusResponse => ({
   has_subscription: subscription !== null,
   subscription,
 });
 
-const list = (
-  subscriptions: SubscriptionListItem[],
-  multiTariff: boolean,
-): SubscriptionsListResponse => ({
-  subscriptions,
-  multi_tariff_enabled: multiTariff,
-});
-
-describe('resolveDashboardSubscription — пока данных нет', () => {
-  it('список не загружен — режим ещё неизвестен, показываем скелет', () => {
-    // Без ответа /cabinet/subscriptions неизвестно даже, из какого источника
-    // брать подписку. Показать «подписки нет» здесь — соврать пользователю.
-    expect(
-      resolveDashboardSubscription({
-        list: undefined,
-        status: undefined,
-        statusLoading: false,
-        now: NOW,
-      }).kind,
-    ).toBe('loading');
+const resolve = (overrides: Partial<Parameters<typeof resolveDashboardSubscription>[0]> = {}) =>
+  resolveDashboardSubscription({
+    status: response(status()),
+    isLoading: false,
+    isError: false,
+    ...overrides,
   });
 
-  it('одно-тарифный режим: список есть, статус ещё грузится — скелет', () => {
-    expect(
-      resolveDashboardSubscription({
-        list: list([], false),
-        status: undefined,
-        statusLoading: true,
-        now: NOW,
-      }).kind,
-    ).toBe('loading');
+describe('resolveDashboardSubscription — данных ещё нет', () => {
+  it('запрос идёт — скелет', () => {
+    expect(resolve({ status: undefined, isLoading: true }).kind).toBe('loading');
+  });
+
+  it('ответа нет и ошибки нет — тоже скелет', () => {
+    // Запрос может быть ещё не запущен (enabled), это не ошибка.
+    expect(resolve({ status: undefined }).kind).toBe('loading');
   });
 });
 
-describe('resolveDashboardSubscription — одно-тарифный режим', () => {
+describe('resolveDashboardSubscription — ошибка запроса', () => {
+  it('запрос упал и данных нет — состояние ошибки, а не вечный скелет', () => {
+    // ⚠️ Ради этого состояние и заведено. У запроса `retry: false`, а
+    // `refetchOnWindowFocus` выключен глобально: без отдельной ветки любая
+    // сетевая осечка или 5xx вешала бы на экране покупки скелет навсегда —
+    // ни текста, ни кнопки повтора.
+    expect(resolve({ status: undefined, isError: true }).kind).toBe('error');
+  });
+
+  it('ошибка при уже загруженных данных не прячет подписку', () => {
+    // Фоновое обновление упало, но данные с прошлого успешного ответа есть.
+    // Стереть их ради экрана ошибки значит наказать человека за чужой сбой.
+    expect(resolve({ isError: true }).kind).toBe('active');
+  });
+
+  it('ошибка приоритетнее флага загрузки, если данных так и нет', () => {
+    expect(resolve({ status: undefined, isLoading: true, isError: true }).kind).toBe('error');
+  });
+});
+
+describe('resolveDashboardSubscription — состояния подписки', () => {
   it('подписки нет', () => {
-    expect(
-      resolveDashboardSubscription({
-        list: list([], false),
-        status: single(null),
-        statusLoading: false,
-        now: NOW,
-      }).kind,
-    ).toBe('none');
+    expect(resolve({ status: response(null) }).kind).toBe('none');
+  });
+
+  it('has_subscription=false перевешивает непустое поле subscription', () => {
+    // Бэкенд может отдать объект с флагом false; главная обязана верить флагу,
+    // иначе покажет карточку подписки тому, у кого её нет.
+    expect(resolve({ status: { has_subscription: false, subscription: status() } }).kind).toBe(
+      'none',
+    );
   });
 
   it('активная подписка отдаёт дату, остаток дней и id', () => {
-    const state = resolveDashboardSubscription({
-      list: list([], false),
-      status: single(status()),
-      statusLoading: false,
-      now: NOW,
-    });
-
-    expect(state).toMatchObject({
+    expect(resolve()).toMatchObject({
       kind: 'active',
       subscription: {
         id: 7,
@@ -134,45 +108,30 @@ describe('resolveDashboardSubscription — одно-тарифный режим'
         daysLeft: 18,
         isTrial: false,
         isExpired: false,
+        hasConnectionLink: true,
       },
     });
   });
 
   it('остаток дней берётся у бэкенда, а не пересчитывается', () => {
-    // days_left считает бэкенд (Subscription.days_left), и он единственный
+    // days_left считает бэкенд (app/database/models.py), и он единственный
     // знает про паузы суточного тарифа. Пересчёт по end_date дал бы своё число.
-    const state = resolveDashboardSubscription({
-      list: list([], false),
-      status: single(status({ days_left: 3 })),
-      statusLoading: false,
-      now: NOW,
-    });
+    const state = resolve({ status: response(status({ days_left: 3 })) });
 
     expect(state.kind === 'active' && state.subscription.daysLeft).toBe(3);
   });
 
   it('истёкшая подписка', () => {
-    const state = resolveDashboardSubscription({
-      list: list([], false),
-      status: single(
-        status({ status: 'expired', is_active: false, is_expired: true, days_left: 0 }),
-      ),
-      statusLoading: false,
-      now: NOW,
+    const state = resolve({
+      status: response(status({ status: 'expired', is_active: false, is_expired: true })),
     });
 
     expect(state.kind).toBe('expired');
-    expect(state.kind === 'expired' && state.subscription.isExpired).toBe(true);
   });
 
   it('отключённая подписка (disabled) — тоже истёкшая', () => {
     expect(
-      resolveDashboardSubscription({
-        list: list([], false),
-        status: single(status({ status: 'disabled', is_active: false })),
-        statusLoading: false,
-        now: NOW,
-      }).kind,
+      resolve({ status: response(status({ status: 'disabled', is_active: false })) }).kind,
     ).toBe('expired');
   });
 
@@ -182,24 +141,18 @@ describe('resolveDashboardSubscription — одно-тарифный режим'
     // разделяет (SubscriptionCardExpired, ветка isLimited), решение владельца —
     // повторить это в простом режиме: докупить трафик можно прямо с главной.
     expect(
-      resolveDashboardSubscription({
-        list: list([], false),
-        status: single(status({ status: 'limited', is_active: false, is_limited: true })),
-        statusLoading: false,
-        now: NOW,
+      resolve({
+        status: response(status({ status: 'limited', is_active: false, is_limited: true })),
       }).kind,
     ).toBe('limited');
   });
 
   it('исчерпанный трафик перебивает истечение — действие важнее срока', () => {
     expect(
-      resolveDashboardSubscription({
-        list: list([], false),
-        status: single(
+      resolve({
+        status: response(
           status({ status: 'limited', is_active: false, is_limited: true, is_expired: true }),
         ),
-        statusLoading: false,
-        now: NOW,
       }).kind,
     ).toBe('limited');
   });
@@ -207,157 +160,13 @@ describe('resolveDashboardSubscription — одно-тарифный режим'
   it('ссылка подписки от панели переносится в состояние', () => {
     // По ней страница решает, показывать ли кнопку подключения: без ссылки
     // подключать нечего, и апстрим блок прячет.
-    const withLink = resolveDashboardSubscription({
-      list: list([], false),
-      status: single(status()),
-      statusLoading: false,
-      now: NOW,
-    });
-    const withoutLink = resolveDashboardSubscription({
-      list: list([], false),
-      status: single(status({ subscription_url: null })),
-      statusLoading: false,
-      now: NOW,
-    });
+    const withoutLink = resolve({ status: response(status({ subscription_url: null })) });
 
-    expect(withLink.kind === 'active' && withLink.subscription.hasConnectionLink).toBe(true);
     expect(withoutLink.kind === 'active' && withoutLink.subscription.hasConnectionLink).toBe(false);
   });
-});
 
-describe('resolveDashboardSubscription — мультитариф', () => {
-  it('подписок нет', () => {
-    expect(
-      resolveDashboardSubscription({
-        list: list([], true),
-        status: undefined,
-        statusLoading: false,
-        now: NOW,
-      }).kind,
-    ).toBe('none');
-  });
-
-  it('статус игнорируется: в мультитарифе /cabinet/subscription не запрашивается', () => {
-    const state = resolveDashboardSubscription({
-      list: list([item({ id: 42 })], true),
-      status: single(status({ id: 7 })),
-      statusLoading: false,
-      now: NOW,
-    });
-
-    expect(state.kind === 'active' && state.subscription.id).toBe(42);
-  });
-
-  it('главной берётся живая подписка с самым поздним концом', () => {
-    const state = resolveDashboardSubscription({
-      list: list(
-        [
-          item({ id: 1, end_date: '2026-08-20T12:00:00Z' }),
-          item({ id: 2, end_date: '2026-12-01T12:00:00Z' }),
-          item({ id: 3, status: 'expired', end_date: '2027-01-01T12:00:00Z' }),
-        ],
-        true,
-      ),
-      status: undefined,
-      statusLoading: false,
-      now: NOW,
-    });
-
-    expect(state.kind === 'active' && state.subscription.id).toBe(2);
-  });
-
-  it('живых нет — берём самую позднюю из мёртвых и показываем как истёкшую', () => {
-    const state = resolveDashboardSubscription({
-      list: list(
-        [
-          item({ id: 1, status: 'expired', end_date: '2026-01-01T12:00:00Z' }),
-          item({ id: 2, status: 'disabled', end_date: '2026-06-01T12:00:00Z' }),
-        ],
-        true,
-      ),
-      status: undefined,
-      statusLoading: false,
-      now: NOW,
-    });
-
-    expect(state.kind).toBe('expired');
-    expect(state.kind === 'expired' && state.subscription.id).toBe(2);
-  });
-
-  it('при равном сроке порядок детерминирован — меньший id', () => {
-    const state = resolveDashboardSubscription({
-      list: list(
-        [
-          item({ id: 5, end_date: '2026-09-01T12:00:00Z' }),
-          item({ id: 2, end_date: '2026-09-01T12:00:00Z' }),
-        ],
-        true,
-      ),
-      status: undefined,
-      statusLoading: false,
-      now: NOW,
-    });
-
-    expect(state.kind === 'active' && state.subscription.id).toBe(2);
-  });
-
-  it('подписка без даты конца не вытесняет датированную', () => {
-    const state = resolveDashboardSubscription({
-      list: list(
-        [item({ id: 1, end_date: null }), item({ id: 2, end_date: '2026-09-01T12:00:00Z' })],
-        true,
-      ),
-      status: undefined,
-      statusLoading: false,
-      now: NOW,
-    });
-
-    expect(state.kind === 'active' && state.subscription.id).toBe(2);
-  });
-
-  it('остаток дней считается от даты конца, как на бэкенде — вниз', () => {
-    // Бэкенд отдаёт `delta.days` (models.py: days_left), то есть неполные сутки
-    // не считаются днём. Округление вверх показывало бы на день больше, чем
-    // напишет бот в уведомлении.
-    const state = resolveDashboardSubscription({
-      list: list([item({ end_date: '2026-08-17T23:00:00Z' })], true),
-      status: undefined,
-      statusLoading: false,
-      now: NOW,
-    });
-
-    expect(state.kind === 'active' && state.subscription.daysLeft).toBe(3);
-  });
-
-  it('дата конца в прошлом — ноль дней, а не отрицательное число', () => {
-    const state = resolveDashboardSubscription({
-      list: list([item({ status: 'expired', end_date: '2026-08-01T12:00:00Z' })], true),
-      status: undefined,
-      statusLoading: false,
-      now: NOW,
-    });
-
-    expect(state.kind === 'expired' && state.subscription.daysLeft).toBe(0);
-  });
-
-  it('статус limited в списке даёт то же состояние, что и в одно-тарифном', () => {
-    const state = resolveDashboardSubscription({
-      list: list([item({ status: 'limited' })], true),
-      status: undefined,
-      statusLoading: false,
-      now: NOW,
-    });
-
-    expect(state.kind).toBe('limited');
-  });
-
-  it('признаки триала и суточного тарифа переносятся из списка', () => {
-    const state = resolveDashboardSubscription({
-      list: list([item({ is_trial: true, is_daily: true })], true),
-      status: undefined,
-      statusLoading: false,
-      now: NOW,
-    });
+  it('признаки триала и суточного тарифа переносятся из ответа', () => {
+    const state = resolve({ status: response(status({ is_trial: true, is_daily: true })) });
 
     expect(state.kind === 'active' && state.subscription).toMatchObject({
       isTrial: true,
@@ -401,21 +210,54 @@ describe('resolveRenewHref', () => {
     expect(resolveRenewHref(sub({ id: 0 }))).toBe('/subscription/purchase');
   });
 
-  it('исчерпанный трафик продлением не лечится — тоже витрина', () => {
-    // Отдельная кнопка «Докупить трафик» ведёт в другое место, см.
-    // resolveTrafficHref: продление срока трафик не вернёт.
+  it('истёкшая с исчерпанным трафиком — по-прежнему витрина', () => {
     expect(resolveRenewHref(sub({ isLimited: true, isExpired: true }))).toBe(
       '/subscription/purchase',
     );
   });
+});
 
-  describe('resolveTrafficHref', () => {
-    it('ведёт на страницу подписки, где живут пакеты трафика', () => {
-      expect(resolveTrafficHref(sub({ isLimited: true }))).toBe('/subscriptions/7');
-    });
+describe('resolveLimitedHref', () => {
+  it('ведёт в витрину тарифов — единственное действие, доступное всегда', () => {
+    // ⚠️ Здесь была ссылка на `/subscriptions/‹id›` под кнопкой «Докупить
+    // трафик». Снята по наблюдению со стенда: блок докупки на странице
+    // подписки у `limited` не отрисовывается, кнопка вела бы в тупик.
+    // Окончательный состав состояния — за владельцем.
+    expect(resolveLimitedHref()).toBe('/subscription/purchase');
+  });
+});
 
-    it('без id — на список подписок, лишь бы не в никуда', () => {
-      expect(resolveTrafficHref(sub({ id: 0, isLimited: true }))).toBe('/subscriptions');
-    });
+/**
+ * Сторож против молчаливого расхождения копии.
+ *
+ * `resolveRenewHref` — копия правила адреса из апстримного
+ * `src/components/subscription/purchaseCta.ts` (импортировать его простому
+ * режиму нельзя, граница). Копия живёт до задачи #29, которой файл переедет к
+ * нам. До тех пор апстрим может поменять правило, и разошлись бы мы молча:
+ * сборка зелёная, кнопка ведёт не туда.
+ *
+ * Файл читается ТЕКСТОМ по той же причине, что и реестр в `routes.test.tsx`:
+ * импорт потянул бы апстримный `types` через alias `@/`, которого нет в
+ * `vitest.config.ts`.
+ */
+describe('копия правила адреса не разошлась с апстримным purchaseCta', () => {
+  const source = readFileSync('src/components/subscription/purchaseCta.ts', 'utf8');
+
+  it('исходник на месте — иначе сторож сверял бы пустоту', () => {
+    expect(source).toContain('resolveSubscriptionCta');
+  });
+
+  it('витрина тарифов — тот же адрес', () => {
+    expect(source).toContain("'/subscription/purchase'");
+  });
+
+  it('адрес продления собирается из id подписки', () => {
+    expect(source).toContain('/subscriptions/${subscription.id}/renew');
+  });
+
+  it('ветки триала, суточного тарифа и отсутствия id никуда не делись', () => {
+    expect(source).toContain('subscription.is_trial');
+    expect(source).toContain('subscription.is_daily');
+    expect(source).toContain('!subscription.id');
   });
 });

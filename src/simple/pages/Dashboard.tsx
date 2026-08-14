@@ -13,8 +13,8 @@ import { uiLocale } from '@/utils/uiLocale';
 import { SIMPLE_NS } from '../i18n';
 import {
   resolveDashboardSubscription,
+  resolveLimitedHref,
   resolveRenewHref,
-  resolveTrafficHref,
   type SimpleSubscription,
 } from './dashboardState';
 
@@ -62,35 +62,34 @@ export function SimpleDashboard() {
     refreshUser();
   }, [refreshUser]);
 
-  const { data: balanceData } = useQuery({
+  const { data: balanceData, refetch: refetchBalance } = useQuery({
     queryKey: ['balance'],
     queryFn: balanceApi.getBalance,
     staleTime: API.BALANCE_STALE_TIME_MS,
     refetchOnMount: 'always',
   });
 
-  // Список нужен всегда: из него узнаётся сам режим (multi_tariff_enabled), то
-  // есть откуда брать подписку. В мультитарифе `/cabinet/subscription` выключен.
-  const { data: listData } = useQuery({
-    queryKey: ['subscriptions-list'],
-    queryFn: () => subscriptionApi.getSubscriptions(),
-    staleTime: 60_000,
-  });
-  const isMultiTariff = listData?.multi_tariff_enabled ?? false;
-
-  const { data: statusData, isLoading: statusLoading } = useQuery({
+  // Одна подписка — один запрос. Ветки мультитарифа здесь нет намеренно: дев
+  // одно-тарифный, прод уходит с мультитарифа до раскатки нового интерфейса
+  // (решение владельца, docs/architecture/two-modes.md). Запрос не ждёт никого —
+  // главная это LCP-экран, оба запроса уходят параллельно.
+  const {
+    data: statusData,
+    isLoading: statusLoading,
+    isError: statusError,
+    refetch: refetchSubscription,
+  } = useQuery({
     queryKey: ['subscription'],
     queryFn: () => subscriptionApi.getSubscription(),
     retry: false,
     staleTime: API.BALANCE_STALE_TIME_MS,
     refetchOnMount: 'always',
-    enabled: listData !== undefined && !isMultiTariff,
   });
 
   const state = resolveDashboardSubscription({
-    list: listData,
     status: statusData,
-    statusLoading,
+    isLoading: statusLoading,
+    isError: statusError,
   });
 
   const { data: trialInfo } = useQuery({
@@ -112,7 +111,11 @@ export function SimpleDashboard() {
 
   const tap = () => haptic.impact('light');
   const userName = displayName(user);
-  const balanceRubles = balanceData?.balance_rubles ?? 0;
+  // Прочерк, а не ноль: нулевой баланс и неизвестный баланс — разные вещи, и
+  // «0 ₽» при упавшем запросе отправило бы человека пополнять уже пополненное.
+  const balanceText = balanceData
+    ? `${formatAmount(balanceData.balance_rubles)} ${currencySymbol}`
+    : '—';
 
   return (
     <div className="space-y-5">
@@ -135,9 +138,7 @@ export function SimpleDashboard() {
       <div className="bento-card flex items-center justify-between gap-4">
         <div className="min-w-0">
           <div className={CAPTION}>{t('dashboard.balance')}</div>
-          <div className="mt-1 truncate text-2xl font-bold text-dark-50">
-            {formatAmount(balanceRubles)} {currencySymbol}
-          </div>
+          <div className="mt-1 truncate text-2xl font-bold text-dark-50">{balanceText}</div>
         </div>
         <Link
           to="/balance/top-up"
@@ -149,6 +150,31 @@ export function SimpleDashboard() {
       </div>
 
       {state.kind === 'loading' && <SubscriptionSkeleton />}
+
+      {/*
+        Запрос упал и показать нечего. Без этой ветки экран покупки залипал бы
+        на скелете навсегда: у запроса `retry: false`, а `refetchOnWindowFocus`
+        выключен глобально — сам он не оживёт.
+      */}
+      {state.kind === 'error' && (
+        <div className="bento-card space-y-3">
+          <div>
+            <div className="text-lg font-bold text-dark-50">{t('dashboard.errorTitle')}</div>
+            <p className="mt-1 text-sm text-dark-400">{t('dashboard.errorHint')}</p>
+          </div>
+          <button
+            type="button"
+            className={ACCENT_BUTTON}
+            onClick={() => {
+              tap();
+              refetchSubscription();
+              refetchBalance();
+            }}
+          >
+            {t('dashboard.retry')}
+          </button>
+        </div>
+      )}
 
       {state.kind === 'active' && (
         <ActiveCard subscription={state.subscription} onTap={tap} t={t} />
@@ -276,10 +302,16 @@ function ActiveCard({ subscription, onTap, t }: CardProps) {
 }
 
 /**
- * Трафик исчерпан. Срок ещё идёт, поэтому дата остаётся на месте, а действие
- * другое: докупить трафик, а не продлить. Кнопка ведёт на страницу подписки с
- * пакетами — человек закрывает проблему прямо с главной, не разыскивая, где это
- * лежит. Ветка повторяет апстримную `SubscriptionCardExpired` при `is_limited`.
+ * Доступ приостановлен (`limited`).
+ *
+ * ⚠️ Причину не называем. В `limited` подписка попадает и по исчерпанному
+ * трафику, и по неудачному автосписанию, а по ответу API эти случаи не
+ * различить — текст «трафик кончился» врал бы половине попавших сюда.
+ *
+ * Кнопки «Докупить трафик» здесь нет сознательно: наблюдение со стенда
+ * показало, что блок докупки на странице подписки у `limited` исчезает
+ * целиком, то есть кнопка вела бы в тупик. Ведём в витрину — оформление
+ * доступно всегда. Окончательный состав состояния за владельцем.
  */
 function LimitedCard({ subscription, onTap, t }: CardProps) {
   return (
@@ -288,13 +320,15 @@ function LimitedCard({ subscription, onTap, t }: CardProps) {
         <span className={CAPTION}>{t('dashboard.subscriptionTitle')}</span>
         <div className="mt-1 text-xl font-bold text-dark-50">{t('dashboard.limitedTitle')}</div>
         <p className="mt-1 text-sm text-dark-400">{t('dashboard.limitedHint')}</p>
-        <p className="mt-1 text-sm text-dark-400">
-          {t('dashboard.activeUntil', { date: formatDate(subscription.endDate) })}
-        </p>
+        {subscription.endDate && (
+          <p className="mt-1 text-sm text-dark-400">
+            {t('dashboard.activeUntil', { date: formatDate(subscription.endDate) })}
+          </p>
+        )}
       </div>
 
-      <Link to={resolveTrafficHref(subscription)} onClick={onTap} className={ACCENT_BUTTON}>
-        {t('dashboard.buyTraffic')}
+      <Link to={resolveLimitedHref()} onClick={onTap} className={ACCENT_BUTTON}>
+        {t('dashboard.getSubscription')}
       </Link>
     </div>
   );
