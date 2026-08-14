@@ -1,0 +1,18 @@
+{
+  "mode": {
+    "toExpert": "All features",
+    "toSimple": "Simplified view"
+  },
+  "nav": {
+    "primary": "Primary navigation",
+    "menu": "Menu",
+    "openMenu": "Open menu",
+    "dashboard": "Home",
+    "subscription": "Subscription",
+    "balance": "Balance",
+    "support": "Support",
+    "profile": "Profile",
+    "info": "Information",
+    "logout": "Log out"
+  }
+}
