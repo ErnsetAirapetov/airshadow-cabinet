@@ -327,6 +327,17 @@ framer-motion, simplex-noise, `@/lib/utils`, `@/hooks/useAnimationLoop` и
   Route-based `/login` и `/register`, email-first раскладка. Порядок разрешения
   конфликта — в CLAUDE.md, слепой `--ours` запрещён.
 - **`src/App.tsx`** — несколько строк под слой подмены.
+- **`src/components/layout/AppShell/AppShell.tsx`** — кнопка-иконка возврата в
+  простой режим в правом блоке действий десктопной шапки, перед тумблером темы
+  (`setMode('simple')` из `@/store/mode`, иконка `PiArrowsInSimple`).
+- **`src/components/layout/AppShell/AppHeader.tsx`** — та же кнопка в ряду
+  действий мобильной шапки. Текстового пункта в оверлее бургера нет намеренно:
+  подпись живёт в `title`/`aria-label`, иначе понадобился бы ключ в четырёх
+  апстримных локалях (`ru/en/fa/zh.json`), а они конфликтуют на каждом синке.
+
+Обе кнопки — узкий патч на файл, и обе сторожит `src/store/expertModeToggle.test.ts`:
+апстрим правит шапку регулярно, и при разрешении конфликта кнопка уехала бы молча,
+со сборкой зелёной.
 
 Всё остальное апстримное должно совпадать с `upstream/main` побайтово.
 
@@ -353,6 +364,11 @@ framer-motion, simplex-noise, `@/lib/utils`, `@/hooks/useAnimationLoop` и
 | **Оставляем** | `Login.tsx`; мелкие функциональные патчи (`api/balance.ts`, `CouponStatus`, `AdminCoupons`, `admin/constants`) | Это не дизайн, живут своей жизнью, метят в апстрим-PR |
 | **Переезжает к нам** | `purchaseCta.ts` + тесты, 222 строки | Новые файлы нашего авторства → в `src/simple/` |
 | **Откатываем к апстриму** | `Dashboard`, `PurchaseCTAButton`, `SubscriptionCardActive`, `Subscription`, `Subscriptions`, `SubscriptionPurchase`, `Support`, `Balance`, `AppShell/*`, `CommandPalette`, иконки, локали | Смысл правки переносится в простую страницу |
+
+⚠️ `AppShell/*` откатывается **не целиком**: кнопка возврата в простой режим в
+`AppShell.tsx` и `AppHeader.tsx` (#41) из отката задачи #33 исключена — это не
+дизайн-правка экспертного режима, а единственный штатный выход из него. Всё
+остальное в каталоге к апстриму возвращается.
 
 **Порядок обязателен: откат апстримного файла делается в том же MR, что и готовая
 простая страница, никогда не раньше.** Иначе на стенде образуется дыра.
