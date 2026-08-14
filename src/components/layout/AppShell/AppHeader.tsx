@@ -3,8 +3,13 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
 import { initDataUser } from '@telegram-apps/sdk-react';
+// Иконка возврата в простой режим (#41). Импортируется прямо здесь, без обёртки
+// в `@/components/icons` — тот каталог апстримный, лишний файл в нём означал бы
+// лишний конфликт на каждом синке ради одной картинки.
+import { PiArrowsInSimple } from 'react-icons/pi';
 
 import { useAuthStore } from '@/store/auth';
+import { useModeStore } from '@/store/mode';
 import { displayName } from '@/utils/displayName';
 import { useShallow } from 'zustand/shallow';
 import { useTheme } from '@/hooks/useTheme';
@@ -87,6 +92,9 @@ export function AppHeader({
   );
   const { toggleTheme, isDark } = useTheme();
   const { haptic, platform } = usePlatform();
+  // Кнопка видна только в экспертном режиме (#41, канон two-modes.md).
+  const setMode = useModeStore((state) => state.setMode);
+  const mode = useModeStore((state) => state.mode);
   const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);
   const [logoLoaded, setLogoLoaded] = useState(() => isLogoPreloaded());
 
@@ -235,6 +243,21 @@ export function AppHeader({
                   title="Search (⌘K)"
                 >
                   <SearchIcon className="h-5 w-5" />
+                </button>
+              )}
+
+              {/* Кнопка видна только в экспертном режиме (#41, канон two-modes.md). */}
+              {mode === 'expert' && (
+                <button
+                  onClick={() => {
+                    haptic.impact('light');
+                    setMode('simple');
+                  }}
+                  className="rounded-linear-lg border border-dark-700/50 bg-dark-800/50 p-2 text-dark-400 transition-all duration-200 hover:bg-dark-700 hover:text-accent-400"
+                  aria-label="Упрощённый вид"
+                  title="Упрощённый вид"
+                >
+                  <PiArrowsInSimple className="h-5 w-5" />
                 </button>
               )}
 

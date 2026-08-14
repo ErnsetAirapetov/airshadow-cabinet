@@ -3,8 +3,13 @@ import { useLocation, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
+// Иконка возврата в простой режим (#41). Импортируется прямо здесь, без обёртки
+// в `@/components/icons` — тот каталог апстримный, лишний файл в нём означал бы
+// лишний конфликт на каждом синке ради одной картинки.
+import { PiArrowsInSimple } from 'react-icons/pi';
 
 import { useAuthStore } from '@/store/auth';
+import { useModeStore } from '@/store/mode';
 import { useHaptic } from '@/platform';
 import { useTelegramSDK } from '@/hooks/useTelegramSDK';
 import { useHeaderHeight } from '@/hooks/useHeaderHeight';
@@ -55,6 +60,9 @@ export function AppShell({ children }: AppShellProps) {
   const { mobile: headerHeight } = useHeaderHeight();
   const haptic = useHaptic();
   const { toggleTheme, isDark } = useTheme();
+  // Кнопка видна только в экспертном режиме (#41, канон two-modes.md).
+  const setMode = useModeStore((state) => state.setMode);
+  const mode = useModeStore((state) => state.mode);
 
   // Extracted hooks
   const { appName, logoLetter, hasCustomLogo, logoUrl } = useBranding();
@@ -244,6 +252,20 @@ export function AppShell({ children }: AppShellProps) {
 
           {/* Right side actions — правая колонка grid, прижата к краю, не сжимается */}
           <div className="flex shrink-0 items-center gap-2 justify-self-end">
+            {/* Кнопка видна только в экспертном режиме (#41, канон two-modes.md). */}
+            {mode === 'expert' && (
+              <button
+                onClick={() => {
+                  haptic.impact('light');
+                  setMode('simple');
+                }}
+                className="rounded-xl border border-dark-700/50 bg-dark-800/50 p-2 text-dark-400 transition-colors duration-200 hover:bg-dark-700 hover:text-accent-400"
+                aria-label="Упрощённый вид"
+                title="Упрощённый вид"
+              >
+                <PiArrowsInSimple className="h-5 w-5" />
+              </button>
+            )}
             <button
               onClick={() => {
                 haptic.impact('light');
