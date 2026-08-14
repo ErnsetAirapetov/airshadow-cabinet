@@ -8,8 +8,10 @@ import { Link, useLocation } from 'react-router';
 import { isLogoPreloaded } from '@/api/branding';
 import { themeColorsApi } from '@/api/themeColors';
 import CampaignBonusNotifier from '@/components/CampaignBonusNotifier';
+import LanguageSwitcher from '@/components/LanguageSwitcher';
 import { PromptDialogHost } from '@/components/PromptDialogHost';
 import SuccessNotificationModal from '@/components/SuccessNotificationModal';
+import TicketNotificationBell from '@/components/TicketNotificationBell';
 import WebSocketNotifications from '@/components/WebSocketNotifications';
 import { useBackgroundConsumer } from '@/components/backgrounds/BackgroundHost';
 import {
@@ -34,7 +36,6 @@ import { useHaptic } from '@/platform';
 import { useAuthStore } from '@/store/auth';
 import { useModeStore } from '@/store/mode';
 import { SIMPLE_NS } from '../../i18n';
-import LanguageSwitcher from '../LanguageSwitcher';
 import { MobileBottomNav } from './MobileBottomNav';
 import { SimpleHeader } from './SimpleHeader';
 
@@ -53,15 +54,17 @@ import { SimpleHeader } from './SimpleHeader';
  *
  *   - фича-флаги навигации (рефералка, колесо, конкурсы, опросы, подарки) —
  *     состав простого режима фиксирован;
- *   - колокольчик уведомлений и поиск — это и есть та перегруженность шапки,
- *     от которой уходим.
+ *   - поиск (командная палитра).
  *
- * Правый угол десктопной шапки (задача #42): язык, тема, режим, выход. Язык и
- * тема вернулись из апстрима осознанно — без них человек, зашедший в кабинет с
- * другим языком аккаунта или со светлой темой, не может это поправить, не уходя
- * в экспертный режим. Тумблер темы показывается, только если админ включил обе
- * темы: иначе `useTheme` молча отказывается переключаться, и кнопка выглядит
- * сломанной.
+ * Правый угол десктопной шапки — апстримный один в один (#42, #43, #47):
+ * режим, тема, колокольчик, язык, выход, все пятеро одинаковыми квадратными
+ * иконками. Владелец сравнил на стенде обе шапки и потребовал именно этого,
+ * поэтому колокольчик вернулся, а кнопка режима лишилась текстовой подписи.
+ * Язык и колокольчик берутся апстримными компонентами НАПРЯМУЮ (поимённо
+ * открыты в `INFRA_ALLOWLIST` гейта `scripts/check-mode-boundaries.mjs`): копия
+ * при требовании «один в один» даёт только расхождение при синке. Тумблер темы
+ * показывается, только если админ включил обе темы: иначе `useTheme` молча
+ * отказывается переключаться, и кнопка выглядит сломанной.
  *
  * Состав панели — требование владельца: только разрешённые в простом режиме
  * пункты плюс админка администратору.
@@ -250,8 +253,28 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
             )}
           </nav>
 
+          {/* Состав, порядок и вид — как в апстримном AppShell (#47): режим,
+              тема, колокольчик, язык, выход. Владелец сравнил обе шапки на
+              стенде и потребовал «один в один», поэтому сверяться тут надо с
+              `src/components/layout/AppShell/AppShell.tsx` построчно, а не «на
+              глаз». Порядок сторожит `src/simple/components/headerActions.test.ts`. */}
           <div className="flex shrink-0 items-center gap-2 justify-self-end">
-            <LanguageSwitcher />
+            {/* Режимы в интерфейсе не называем: человек видит обещание «все
+                возможности», а не ярлык «ты новичок». Подпись живёт в
+                title/aria-label — кнопка с текстом рядом с четырьмя иконками
+                ломала ряд, и её владелец забраковал (#47). */}
+            <button
+              type="button"
+              onClick={() => {
+                haptic.impact('light');
+                setMode('expert');
+              }}
+              className="rounded-xl border border-dark-700/50 bg-dark-800/50 p-2 text-dark-400 transition-colors duration-200 hover:bg-dark-700 hover:text-accent-400"
+              aria-label={tSimple('mode.toExpert')}
+              title={tSimple('mode.toExpert')}
+            >
+              <PiArrowsOutSimple className="h-5 w-5" />
+            </button>
             {/* `hidden`, а не условный рендер: разметка кнопки остаётся той же,
                 что у апстрима, и отличие сводится к одному классу. */}
             <button
@@ -271,19 +294,8 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
             >
               {isDark ? <MoonIcon className="h-5 w-5" /> : <SunIcon className="h-5 w-5" />}
             </button>
-            {/* Режимы в интерфейсе не называем: человек видит обещание «все
-                возможности», а не ярлык «ты новичок». */}
-            <button
-              type="button"
-              onClick={() => {
-                haptic.impact('light');
-                setMode('expert');
-              }}
-              className="flex items-center gap-1.5 rounded-xl border border-dark-700/50 bg-dark-800/50 px-3 py-2 text-[13px] font-medium text-dark-300 transition-colors duration-200 hover:bg-dark-700 hover:text-accent-400"
-            >
-              <PiArrowsOutSimple className="h-4 w-4" />
-              {tSimple('mode.toExpert')}
-            </button>
+            <TicketNotificationBell isAdmin={location.pathname.startsWith('/admin')} />
+            <LanguageSwitcher />
             <button
               type="button"
               onClick={() => {

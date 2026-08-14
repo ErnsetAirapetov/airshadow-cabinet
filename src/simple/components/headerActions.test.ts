@@ -2,7 +2,8 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Сторожа правого блока действий десктопной шапки простого режима (задача #42).
+ * Сторожа действий в шапке простого режима — десктопной и в ящике бургера
+ * (задачи #42, #43, #47).
  *
  * ⚠️ Файлы читаются ТЕКСТОМ, а не импортируются. Компонентных тестов в проекте
  * не бывает: `vitest.config.ts` задаёт `environment: 'node'`, jsdom и
@@ -11,67 +12,41 @@ import { describe, expect, it } from 'vitest';
  * Тот же приём, что в `src/simple/routes.test.tsx`; цена та же — разбор видит
  * только то, что записано литералом, поэтому у каждого сторожа ниже есть
  * парная проверка «разбор удался».
+ *
+ * Что охраняется по существу (#47): владелец потребовал шапку «один в один» с
+ * апстримной, поэтому проверяются состав, ПОРЯДОК и вид кнопок, а язык с
+ * колокольчиком обязаны браться из апстрима напрямую. Прежний сторож сверял
+ * копию `src/simple/components/LanguageSwitcher.tsx` с оригиналом побайтово —
+ * копии больше нет, сверять нечего, эти проверки убраны вместе с ней.
  */
 
-const UPSTREAM_SWITCHER = 'src/components/LanguageSwitcher.tsx';
 const SIMPLE_SWITCHER = 'src/simple/components/LanguageSwitcher.tsx';
 const SHELL = 'src/simple/components/layout/SimpleShell.tsx';
 const HEADER = 'src/simple/components/layout/SimpleHeader.tsx';
+
+/** Квадратная кнопка-иконка апстримной шапки — эталон вида всех действий. */
+const SQUARE_BUTTON = 'rounded-xl border border-dark-700/50 bg-dark-800/50 p-2';
 
 function read(path: string): string {
   return existsSync(path) ? readFileSync(path, 'utf8') : '';
 }
 
-/**
- * Докстринги в копии свои, логика — апстримная: блочные комментарии
- * выбрасываем, а вместе с ними пустые строки, оставшиеся на их месте.
- */
-function withoutBlockComments(code: string): string {
-  return code
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map((line) => line.trimEnd())
-    .filter((line) => line.length > 0)
-    .join('\n');
-}
-
-const upstreamSwitcher = read(UPSTREAM_SWITCHER);
-const simpleSwitcher = read(SIMPLE_SWITCHER);
 const shell = read(SHELL);
 const header = read(HEADER);
 
-describe('копия LanguageSwitcher в простом режиме', () => {
-  it('разбор апстримного оригинала удался — иначе сторож сверял бы пустоту', () => {
-    // Без этой проверки исчезнувший или переименованный апстримный файл дал бы
-    // пустую строку, и сравнение ниже сравнивало бы пустоту с пустотой.
-    expect(upstreamSwitcher.length).toBeGreaterThan(500);
-    expect(upstreamSwitcher).toContain('infoApi.getLanguages');
+describe('апстримные компоненты шапки берутся напрямую', () => {
+  it('копии LanguageSwitcher в простом режиме нет', () => {
+    // Требование #47 — один в один с апстримом. Копия давала бы расхождение при
+    // синке; вместо неё компонент открыт поимённо в INFRA_ALLOWLIST гейта
+    // `scripts/check-mode-boundaries.mjs`.
+    expect(existsSync(SIMPLE_SWITCHER)).toBe(false);
   });
 
-  it('копия существует — прямой импорт апстримного компонента запрещён границами', () => {
-    // `src/components/LanguageSwitcher.tsx` лежит вне открытых каталогов
-    // (primitives, ui, icons), поэтому импорт из `src/simple/**` уронил бы
-    // `npm run check:modes`. Канон предписывает копию.
-    expect(existsSync(SIMPLE_SWITCHER)).toBe(true);
-  });
-
-  it('копия помечена номером задачи — иначе через год непонятно, откуда она', () => {
-    expect(simpleSwitcher).toContain('#42');
-  });
-
-  it('копия показывает полный список языков аккаунта, а не зашитый ru/en', () => {
-    // Решение владельца от 14.08.2026: переключатель целиком, со всеми языками
-    // аккаунта. Отсечка списка здесь была бы отменой этого решения.
-    expect(simpleSwitcher).toContain('infoApi.getLanguages');
-    expect(simpleSwitcher).toMatch(/availableLanguages\.map/);
-    expect(simpleSwitcher).not.toMatch(/\.filter\(/);
-  });
-
-  it('логика копии совпадает с апстримной побайтово, кроме докстринга', () => {
-    // Сторож против молчаливого расхождения: апстрим может поменять оригинал, и
-    // сборка останется зелёной, а переключатель в простом режиме — вчерашним.
-    expect(withoutBlockComments(simpleSwitcher)).toBe(withoutBlockComments(upstreamSwitcher));
+  it('гейт границ открывает ровно эти два компонента', () => {
+    const gate = read('scripts/check-mode-boundaries.mjs');
+    expect(gate).toContain('INFRA_ALLOWLIST');
+    expect(gate).toContain("'src/components/TicketNotificationBell'");
+    expect(gate).toContain("'src/components/LanguageSwitcher'");
   });
 });
 
@@ -84,12 +59,12 @@ describe('правый блок действий десктопной шапки
     expect(rightActions.length).toBeGreaterThan(200);
   });
 
-  it('в шапке есть переключатель языка — своя копия, не апстримная', () => {
-    // Относительный путь, а не `@/components/LanguageSwitcher`: апстримный
-    // компонент за границей, и его импорт уронил бы `npm run check:modes`.
-    expect(shell).toContain("from '../LanguageSwitcher'");
-    expect(shell).not.toContain("from '@/components/LanguageSwitcher'");
+  it('язык и колокольчик — апстримные компоненты, а не копии', () => {
+    expect(shell).toContain("from '@/components/LanguageSwitcher'");
+    expect(shell).toContain("from '@/components/TicketNotificationBell'");
+    expect(shell).not.toContain("from '../LanguageSwitcher'");
     expect(rightActions).toContain('<LanguageSwitcher />');
+    expect(rightActions).toContain('<TicketNotificationBell');
   });
 
   it('тумблер темы переключает тему апстримным хуком', () => {
@@ -113,50 +88,109 @@ describe('правый блок действий десктопной шапки
     expect(shell).not.toContain('ChevronExpandIcon');
   });
 
-  it('порядок действий: язык, тема, режим', () => {
-    const lang = rightActions.indexOf('<LanguageSwitcher />');
-    const theme = rightActions.indexOf('toggleTheme()');
-    const mode = rightActions.indexOf("setMode('expert')");
+  it('кнопка режима — квадратная иконка без подписи, как в апстримной шапке', () => {
+    // #47: подпись «Все возможности» уехала в title/aria-label, вид кнопки
+    // совпал с тумблером темы. Текстовый узел внутри кнопки — возврат к
+    // забракованному варианту.
+    expect(rightActions).toContain("title={tSimple('mode.toExpert')}");
+    expect(rightActions).toContain("aria-label={tSimple('mode.toExpert')}");
+    expect(rightActions).not.toMatch(/\/>\s*\{tSimple\('mode\.toExpert'\)\}/);
+    expect(rightActions).toContain('<PiArrowsOutSimple className="h-5 w-5" />');
+  });
 
-    expect(lang).toBeGreaterThan(-1);
-    expect(theme).toBeGreaterThan(lang);
-    expect(mode).toBeGreaterThan(theme);
+  it('все действия — одинаковые квадратные кнопки апстримного вида', () => {
+    // Три собственные кнопки блока (режим, тема, выход); язык и колокольчик
+    // приезжают апстримными компонентами со своим оформлением.
+    const squares = rightActions.split(SQUARE_BUTTON).length - 1;
+    expect(squares).toBe(3);
+    expect(rightActions).not.toContain('px-3 py-2 text-[13px]');
+  });
+
+  it('порядок как в апстримном AppShell: режим, тема, колокольчик, язык, выход', () => {
+    const mode = rightActions.indexOf("setMode('expert')");
+    const theme = rightActions.indexOf('toggleTheme()');
+    const bell = rightActions.indexOf('<TicketNotificationBell');
+    const lang = rightActions.indexOf('<LanguageSwitcher />');
+    const logout = rightActions.indexOf('logout()');
+
+    expect(mode).toBeGreaterThan(-1);
+    expect(theme).toBeGreaterThan(mode);
+    expect(bell).toBeGreaterThan(theme);
+    expect(lang).toBeGreaterThan(bell);
+    expect(logout).toBeGreaterThan(lang);
   });
 });
 
-describe('ящик бургер-меню мобильной шапки простого режима (задача #43)', () => {
+describe('ящик бургер-меню мобильной шапки простого режима (задачи #43, #47)', () => {
   // Ящик открывается блоком `mobileMenuOpen && (...)` — берём всё, что после
   // него, чтобы не спутать переключатели ящика с чем-то из шапки над ним.
   const drawer = header.split('{mobileMenuOpen && (')[1] ?? '';
+  const mobileBar = header.split('{mobileMenuOpen && (')[0] ?? '';
+  // Ряд действий внутри ящика — блок рядом с карточкой пользователя.
+  const drawerActions =
+    drawer.split('className="flex flex-shrink-0 items-center gap-2"')[1]?.split('</div>')[0] ?? '';
 
   it('разбор SimpleHeader удался — иначе сторожа ниже проходили бы всегда', () => {
     expect(header.length).toBeGreaterThan(1000);
     expect(header).toContain('mobile-menu-content');
     expect(drawer.length).toBeGreaterThan(200);
+    expect(mobileBar).toContain('aria-expanded={mobileMenuOpen}');
   });
 
-  it('в ящике есть переключатель языка — своя копия, не апстримная', () => {
-    expect(header).toContain("from '../LanguageSwitcher'");
-    expect(header).not.toContain("from '@/components/LanguageSwitcher'");
-    expect(drawer).toContain('<LanguageSwitcher />');
+  it('разбор ряда действий ящика удался', () => {
+    expect(drawerActions.length).toBeGreaterThan(100);
+  });
+
+  it('язык и колокольчик — апстримные компоненты, а не копии', () => {
+    expect(header).toContain("from '@/components/LanguageSwitcher'");
+    expect(header).toContain("from '@/components/TicketNotificationBell'");
+    expect(header).not.toContain("from '../LanguageSwitcher'");
+    expect(drawerActions).toContain('<LanguageSwitcher />');
+    expect(drawerActions).toContain('<TicketNotificationBell');
   });
 
   it('тумблер темы в ящике переключает тему апстримным хуком', () => {
     expect(header).toContain("from '@/hooks/useTheme'");
     expect(header).toContain('toggleTheme');
-    expect(drawer).toContain('MoonIcon');
-    expect(drawer).toContain('SunIcon');
+    expect(drawerActions).toContain('MoonIcon');
+    expect(drawerActions).toContain('SunIcon');
   });
 
   it('тумблер темы в ящике виден, только когда админ включил обе темы', () => {
     expect(header).toContain('themeColorsApi.getEnabledThemes');
     expect(header).toMatch(/enabledThemes\?\.dark && enabledThemes\?\.light/);
-    expect(drawer).toMatch(/!canToggleTheme && 'hidden'/);
+    expect(drawerActions).toMatch(/!canToggleTheme && 'hidden'/);
+  });
+
+  it('порядок в ряду: тема, колокольчик, язык — язык крайний справа', () => {
+    // #47, решение владельца: язык последним в ряду.
+    const theme = drawerActions.indexOf('toggleTheme()');
+    const bell = drawerActions.indexOf('<TicketNotificationBell');
+    const lang = drawerActions.indexOf('<LanguageSwitcher />');
+
+    expect(theme).toBeGreaterThan(-1);
+    expect(bell).toBeGreaterThan(theme);
+    expect(lang).toBeGreaterThan(bell);
+  });
+
+  it('мобильная шапка над ящиком остаётся пустой', () => {
+    // Владельцу это нравится осознанно (#47): на мобилке в шапке только логотип
+    // и бургер, все действия живут в ящике.
+    expect(mobileBar).not.toContain('<LanguageSwitcher');
+    expect(mobileBar).not.toContain('<TicketNotificationBell');
+    expect(mobileBar).not.toContain('toggleTheme()');
   });
 
   it('пункт возврата в экспертный режим — иконка Phosphor напрямую, без обёртки в components/icons', () => {
     expect(header).toContain("from 'react-icons/pi'");
     expect(drawer).toContain('<PiArrowsOutSimple');
     expect(header).not.toContain('ChevronExpandIcon');
+  });
+
+  it('переход в экспертный режим остаётся отдельной строкой списка меню', () => {
+    // Не иконкой в ряду действий: строка с подписью в бургере — решение #43,
+    // задача #47 его не отменяла.
+    expect(drawer).toMatch(/className="nav-item w-full"[\s\S]{0,200}<PiArrowsOutSimple/);
+    expect(drawerActions).not.toContain('PiArrowsOutSimple');
   });
 });
