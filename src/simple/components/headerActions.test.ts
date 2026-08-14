@@ -16,6 +16,7 @@ import { describe, expect, it } from 'vitest';
 const UPSTREAM_SWITCHER = 'src/components/LanguageSwitcher.tsx';
 const SIMPLE_SWITCHER = 'src/simple/components/LanguageSwitcher.tsx';
 const SHELL = 'src/simple/components/layout/SimpleShell.tsx';
+const HEADER = 'src/simple/components/layout/SimpleHeader.tsx';
 
 function read(path: string): string {
   return existsSync(path) ? readFileSync(path, 'utf8') : '';
@@ -38,6 +39,7 @@ function withoutBlockComments(code: string): string {
 const upstreamSwitcher = read(UPSTREAM_SWITCHER);
 const simpleSwitcher = read(SIMPLE_SWITCHER);
 const shell = read(SHELL);
+const header = read(HEADER);
 
 describe('копия LanguageSwitcher в простом режиме', () => {
   it('разбор апстримного оригинала удался — иначе сторож сверял бы пустоту', () => {
@@ -119,5 +121,42 @@ describe('правый блок действий десктопной шапки
     expect(lang).toBeGreaterThan(-1);
     expect(theme).toBeGreaterThan(lang);
     expect(mode).toBeGreaterThan(theme);
+  });
+});
+
+describe('ящик бургер-меню мобильной шапки простого режима (задача #43)', () => {
+  // Ящик открывается блоком `mobileMenuOpen && (...)` — берём всё, что после
+  // него, чтобы не спутать переключатели ящика с чем-то из шапки над ним.
+  const drawer = header.split('{mobileMenuOpen && (')[1] ?? '';
+
+  it('разбор SimpleHeader удался — иначе сторожа ниже проходили бы всегда', () => {
+    expect(header.length).toBeGreaterThan(1000);
+    expect(header).toContain('mobile-menu-content');
+    expect(drawer.length).toBeGreaterThan(200);
+  });
+
+  it('в ящике есть переключатель языка — своя копия, не апстримная', () => {
+    expect(header).toContain("from '../LanguageSwitcher'");
+    expect(header).not.toContain("from '@/components/LanguageSwitcher'");
+    expect(drawer).toContain('<LanguageSwitcher />');
+  });
+
+  it('тумблер темы в ящике переключает тему апстримным хуком', () => {
+    expect(header).toContain("from '@/hooks/useTheme'");
+    expect(header).toContain('toggleTheme');
+    expect(drawer).toContain('MoonIcon');
+    expect(drawer).toContain('SunIcon');
+  });
+
+  it('тумблер темы в ящике виден, только когда админ включил обе темы', () => {
+    expect(header).toContain('themeColorsApi.getEnabledThemes');
+    expect(header).toMatch(/enabledThemes\?\.dark && enabledThemes\?\.light/);
+    expect(drawer).toMatch(/!canToggleTheme && 'hidden'/);
+  });
+
+  it('пункт возврата в экспертный режим — иконка Phosphor напрямую, без обёртки в components/icons', () => {
+    expect(header).toContain("from 'react-icons/pi'");
+    expect(drawer).toContain('<PiArrowsOutSimple');
+    expect(header).not.toContain('ChevronExpandIcon');
   });
 });

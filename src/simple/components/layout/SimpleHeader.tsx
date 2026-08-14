@@ -2,6 +2,7 @@ import { initDataUser } from '@telegram-apps/sdk-react';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { PiArrowsOutSimple } from 'react-icons/pi';
 import { Link, useLocation } from 'react-router';
 import { useShallow } from 'zustand/shallow';
 
@@ -12,21 +13,25 @@ import {
   preloadLogo,
   setCachedBranding,
 } from '@/api/branding';
+import { themeColorsApi } from '@/api/themeColors';
 import {
   CloseIcon,
   CogIcon,
-  ChevronExpandIcon,
   InfoIcon,
   LogoutIcon,
   MenuIcon,
+  MoonIcon,
+  SunIcon,
   UserIcon,
 } from '@/components/icons';
+import { useTheme } from '@/hooks/useTheme';
 import type { TelegramPlatform } from '@/hooks/useTelegramSDK';
 import { cn } from '@/lib/utils';
 import { usePlatform } from '@/platform';
 import { useAuthStore } from '@/store/auth';
 import { displayName } from '@/utils/displayName';
 import { SIMPLE_NS } from '../../i18n';
+import LanguageSwitcher from '../LanguageSwitcher';
 import { useModeStore } from '@/store/mode';
 
 const FALLBACK_NAME = import.meta.env.VITE_APP_NAME || 'Cabinet';
@@ -46,11 +51,19 @@ interface SimpleHeaderProps {
  * Копия апстримного `src/components/layout/AppShell/AppHeader.tsx` — мобильная
  * шапка простого режима.
  *
- * Что выброшено относительно апстрима: переключатель темы, колокольчик
- * уведомлений, переключатель языка (в простом режиме его нет — язык берётся из
- * аккаунта, канон) и поиск. Из ящика убраны пункты, которые уже стоят в нижнем
- * меню (главная, подписка, баланс, поддержка): дублировать четыре кнопки,
- * видимые на том же экране, незачем.
+ * Что выброшено относительно апстрима: колокольчик уведомлений и поиск. Из
+ * ящика убраны пункты, которые уже стоят в нижнем меню (главная, подписка,
+ * баланс, поддержка): дублировать четыре кнопки, видимые на том же экране,
+ * незачем.
+ *
+ * Тумблер темы и переключатель языка (задача #43) в апстриме живут в верхней
+ * строке шапки рядом с кнопкой меню; здесь — в ящике, рядом с блоком
+ * пользователя, тем же приёмом, что правый угол десктопной шапки (#42): без
+ * них человек с другим языком аккаунта или светлой темой не может это
+ * поправить, не уходя в экспертный режим. Тумблер темы виден, только если
+ * админ включил обе темы — иначе `useTheme` молча отказывается переключать, и
+ * кнопка выглядит сломанной. Переключатель языка — общая с десктопом копия
+ * `src/simple/components/LanguageSwitcher.tsx`, второй копии не заводим.
  *
  * Что сохранено дословно, потому что писалось не нами и не нами должно
  * чиниться: безопасные зоны полноэкранного Telegram, блокировка скролла под
@@ -73,8 +86,18 @@ export function SimpleHeader({
   );
   const { haptic } = usePlatform();
   const setMode = useModeStore((state) => state.setMode);
+  const { toggleTheme, isDark } = useTheme();
   const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);
   const [logoLoaded, setLogoLoaded] = useState(() => isLogoPreloaded());
+
+  // Видимость тумблера темы — тот же запрос и ключ, что у десктопной шапки
+  // (#42), поэтому переключение режима не стоит лишнего похода в сеть.
+  const { data: enabledThemes } = useQuery({
+    queryKey: ['enabled-themes'],
+    queryFn: themeColorsApi.getEnabledThemes,
+    staleTime: 1000 * 60 * 5,
+  });
+  const canToggleTheme = enabledThemes?.dark && enabledThemes?.light;
 
   const { data: branding } = useQuery({
     queryKey: ['branding'],
@@ -221,7 +244,7 @@ export function SimpleHeader({
           >
             <div className="mx-auto max-w-6xl px-4 py-4">
               <div className="mb-4 flex items-center justify-between border-b border-dark-800/50 pb-4">
-                <div className="flex items-center gap-3">
+                <div className="flex min-w-0 items-center gap-3">
                   {userPhotoUrl ? (
                     <img
                       src={userPhotoUrl}
@@ -249,6 +272,33 @@ export function SimpleHeader({
                       @{user?.username || `ID: ${user?.telegram_id}`}
                     </div>
                   </div>
+                </div>
+
+                {/* Язык и тема — то же, что в правом углу десктопной шапки
+                    (#42): без них человек с другим языком аккаунта или
+                    светлой темой не может это поправить, не уходя в
+                    экспертный режим. */}
+                <div className="flex flex-shrink-0 items-center gap-2">
+                  <LanguageSwitcher />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      haptic.impact('light');
+                      toggleTheme();
+                    }}
+                    className={cn(
+                      'rounded-xl border border-dark-700/50 bg-dark-800/50 p-2 text-dark-400 transition-colors duration-200 hover:bg-dark-700 hover:text-accent-400',
+                      !canToggleTheme && 'hidden',
+                    )}
+                    aria-label={
+                      isDark ? t('theme.light') || 'Light mode' : t('theme.dark') || 'Dark mode'
+                    }
+                    title={
+                      isDark ? t('theme.light') || 'Light mode' : t('theme.dark') || 'Dark mode'
+                    }
+                  >
+                    {isDark ? <MoonIcon className="h-5 w-5" /> : <SunIcon className="h-5 w-5" />}
+                  </button>
                 </div>
               </div>
 
@@ -309,7 +359,7 @@ export function SimpleHeader({
                   }}
                   className="nav-item w-full"
                 >
-                  <ChevronExpandIcon className="h-5 w-5" />
+                  <PiArrowsOutSimple className="h-5 w-5" />
                   {tSimple('mode.toExpert')}
                 </button>
 
