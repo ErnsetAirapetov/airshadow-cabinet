@@ -11,5 +11,11 @@
     "errorTitle": "Could not load the subscription",
     "errorHint": "Looks like the server is unreachable.",
     "retry": "Try again"
+  },
+  "balance": {
+    "promocode": {
+      "expiredLabel": "Expired",
+      "disabledLabel": "Disabled"
+    }
   }
 }
