@@ -12,15 +12,14 @@ import { useAuthStore } from '@/store/auth';
 import type { PaginatedResponse, Transaction } from '@/types';
 import { uiLocale } from '@/utils/uiLocale';
 import { BalanceWidget, useBalanceQuery } from '../components/BalanceWidget';
+import { PaymentMethodsGrid } from '../components/PaymentMethodsGrid';
 import { SIMPLE_NS } from '../i18n';
 import {
-  resolveAccentedMethodId,
   resolvePaymentReturnRedirect,
   resolvePromocodeErrorKey,
   resolveTransactionAmount,
   resolveTransactionBadge,
   resolveTransactionLabelKey,
-  topUpHref,
 } from './balanceState';
 
 /**
@@ -41,10 +40,12 @@ import {
  *
  * Экран суммы пополнения (`/balance/top-up/:methodId`) с задачи #53 тоже простой —
  * `src/simple/pages/TopUpAmount.tsx`, и блок баланса у них общий
- * (`src/simple/components/BalanceWidget.tsx`). Выбор способа (`/balance/top-up`) и
- * результат (`/balance/top-up/result*`) остаются апстримными: спеки на них нет.
+ * (`src/simple/components/BalanceWidget.tsx`). Выбор способа (`/balance/top-up`) с
+ * задачи #55 тоже наш — `src/simple/pages/TopUpMethodSelect.tsx`, и карточки
+ * способов у них общие (`src/simple/components/PaymentMethodsGrid.tsx`). Апстримным
+ * остаётся только результат оплаты (`/balance/top-up/result*`): спеки на него нет.
  *
- * ⚠️ Хром карточек — глобальные классы `bento-card` / `bento-card-hover` из
+ * ⚠️ Хром блоков страницы — глобальные классы `bento-card` / `bento-card-hover` из
  * `src/styles/globals.css`, а не апстримный `Card` из `components/data-display`:
  * он за границей режимов и тянет за собой `components/motion/transitions`, `cva`
  * и radix-slot. Классы повторяют вид апстримного `Card` (та же база
@@ -118,8 +119,6 @@ export function SimpleBalance() {
     queryFn: balanceApi.getPaymentMethods,
   });
 
-  const accentedMethodId = resolveAccentedMethodId(paymentMethods);
-
   const handlePromocodeActivate = async (subscriptionId?: number) => {
     const code = subscriptionId ? promoSelectCode || '' : promocode.trim();
     if (!code) return;
@@ -175,87 +174,15 @@ export function SimpleBalance() {
       {/* Баланс — общий виджет: тот же блок стоит на экране суммы пополнения. */}
       <BalanceWidget />
 
-      {/* Способы пополнения — сразу под балансом: главное действие экрана. */}
+      {/* Способы пополнения — сразу под балансом: главное действие экрана.
+          Карточки рисует общий компонент: тот же блок стоит на экране выбора
+          способа (`/balance/top-up`, задача #55). Пустой список здесь скрывает
+          блок целиком — объяснять пустоту на балансе нечем и не нужно, этим
+          занимается экран выбора способа. */}
       {paymentMethods && paymentMethods.length > 0 && (
         <div className="bento-card">
           <h2 className="mb-4 text-lg font-semibold text-dark-100">{t('balance.topUpBalance')}</h2>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {paymentMethods.map((method) => {
-              const methodKey = method.id.toLowerCase().replace(/-/g, '_');
-              const translatedName = t(`balance.paymentMethods.${methodKey}.name`, {
-                defaultValue: '',
-              });
-              const translatedDesc = t(`balance.paymentMethods.${methodKey}.description`, {
-                defaultValue: '',
-              });
-              // ⚠️ Акцент — буквально первой карточке списка, независимо от
-              // доступности (решение владельца 17.08.2026, #52). Решает
-              // `resolveAccentedMethodId`, а не условие в разметке: его ветки
-              // (пусто / данных нет / все недоступны / недоступный первым)
-              // покрыты тестом.
-              const isAccented = method.id === accentedMethodId;
-
-              return (
-                <button
-                  key={method.id}
-                  type="button"
-                  disabled={!method.is_available}
-                  onClick={() => method.is_available && navigate(topUpHref(method.id))}
-                  className={[
-                    'text-left',
-                    // `bento-card-hover` включает в себя `bento-card` (@apply) и
-                    // добавляет ровно то, что делал вариант `interactive` у
-                    // апстримного `Card`: курсор, подсветку рамки и фона на
-                    // hover, сжатие на нажатии.
-                    method.is_available
-                      ? 'bento-card-hover'
-                      : 'bento-card cursor-not-allowed opacity-50',
-                    // Акцент в покое: рамка, градиентная подсветка, свечение и
-                    // ширина строки сетки от `sm`. Условие — только `isAccented`:
-                    // акцент есть и у недоступной первой карточки (#52).
-                    isAccented
-                      ? 'border-accent-500/40 bg-gradient-to-br from-accent-500/10 shadow-glow sm:col-span-2 lg:col-span-3'
-                      : '',
-                    // ⚠️ Hover-варианты акцента — отдельной ветвью и ТОЛЬКО
-                    // доступной карточке (#52): на приглушённой некликабельной
-                    // подсветка под курсором зовёт нажать на то, что не нажимается.
-                    //
-                    // Доступной они обязательны, а не украшение:
-                    // `.bento-card-hover:hover` из `src/styles/globals.css` — это
-                    // специфичность 0,2,0, и она перебивает утилиты
-                    // `border-accent-500/40` и `shadow-glow` (0,1,0). Без них под
-                    // курсором акцентная карточка сереет и выглядит как все
-                    // остальные. Hover-варианты тоже 0,2,0, но живут в
-                    // `@layer utilities` — ниже по источнику, поэтому выигрывают.
-                    // Недоступной карточке перебивать нечего: класса
-                    // `bento-card-hover` у неё нет, поэтому правила
-                    // `.bento-card-hover:hover` по ней не срабатывают. А вот
-                    // utility-варианты `hover:` сработали бы и на `disabled`:
-                    // браузер шлёт `:hover` и по выключенной кнопке, класс-гейта у
-                    // утилит нет. Именно поэтому их недоступной карточке и не
-                    // выдают — иначе она подсвечивалась бы под курсором, оставаясь
-                    // ненажимаемой.
-                    isAccented && method.is_available
-                      ? 'hover:border-accent-500/60 hover:shadow-glow'
-                      : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ')}
-                >
-                  <div className="font-semibold text-dark-100">{method.name || translatedName}</div>
-                  {(method.description || translatedDesc) && (
-                    <div className="mt-1 text-sm text-dark-500">
-                      {method.description || translatedDesc}
-                    </div>
-                  )}
-                  <div className="mt-3 text-xs text-dark-400">
-                    {formatAmount(method.min_amount_kopeks / 100, 0)} {t('common.rangeTo', 'to')}{' '}
-                    {formatAmount(method.max_amount_kopeks / 100, 0)} {currencySymbol}
-                  </div>
-                </button>
-              );
-            })}
-          </div>
+          <PaymentMethodsGrid methods={paymentMethods} />
         </div>
       )}
 

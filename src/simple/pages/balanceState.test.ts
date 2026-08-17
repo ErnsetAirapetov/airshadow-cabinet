@@ -217,6 +217,20 @@ describe('topUpHref', () => {
   it('адрес экрана суммы собирается из id способа', () => {
     expect(topUpHref('platega')).toBe('/balance/top-up/platega');
   });
+
+  it('хвост query доезжает до экрана суммы (задача #55)', () => {
+    // ⚠️ Единственная причина, по которой экран выбора способа существует:
+    // `amount` и `returnTo` приходят на него от `InsufficientBalancePrompt` и
+    // обязаны доехать дальше. Потеря хвоста стоит предзаполнения недостающей
+    // суммы и возврата к прерванной покупке.
+    expect(topUpHref('platega', '?amount=150&returnTo=%2Fsubscription')).toBe(
+      '/balance/top-up/platega?amount=150&returnTo=%2Fsubscription',
+    );
+  });
+
+  it('без хвоста адрес остаётся прежним — баланс зовёт именно так', () => {
+    expect(topUpHref('platega', '')).toBe('/balance/top-up/platega');
+  });
 });
 
 /**
