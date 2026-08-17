@@ -149,9 +149,17 @@ export function resolveTransactionAmount(amountRubles: number): TransactionAmoun
   return { sign: '-', value: Math.abs(amountRubles), colorClass: 'text-error-400' };
 }
 
-/** Экран суммы пополнения — апстримный маршрут `/balance/top-up/:methodId`. */
-export function topUpHref(methodId: string): string {
-  return `/balance/top-up/${methodId}`;
+/**
+ * Экран суммы пополнения — апстримный маршрут `/balance/top-up/:methodId`.
+ *
+ * `search` — готовый query-хвост вида `?amount=…&returnTo=…` или пустая строка
+ * (задача #55). Нужен экрану выбора способа: `amount` и `returnTo` приходят на
+ * него от `InsufficientBalancePrompt` и обязаны доехать до экрана суммы, иначе
+ * теряются предзаполнение недостающей суммы и возврат к прерванной покупке.
+ * Страница баланса зовёт без хвоста — там этих параметров нет.
+ */
+export function topUpHref(methodId: string, search = ''): string {
+  return `/balance/top-up/${methodId}${search}`;
 }
 
 /**

@@ -68,12 +68,17 @@ describe('matchSimpleRoute', () => {
 });
 
 describe('состав реестра', () => {
-  it('боевой реестр подменяет главную, баланс и сумму пополнения', () => {
+  it('боевой реестр подменяет главную, баланс, выбор способа и сумму пополнения', () => {
     // Сторож состава. Раньше здесь стояло ожидание пустого реестра — каркас не
     // подменял ничего; первая простая страница (задача #27) его уронила, как и
     // было задумано. Дальше список растёт задачами милстоуна [M1-E05], и каждая
     // новая страница обязана появиться здесь осознанно.
-    expect(registeredPaths).toEqual(['/', '/balance', '/balance/top-up/:methodId']);
+    expect(registeredPaths).toEqual([
+      '/',
+      '/balance',
+      '/balance/top-up',
+      '/balance/top-up/:methodId',
+    ]);
   });
 
   it('пути в реестре не повторяются', () => {
@@ -150,6 +155,23 @@ describe('литеральный маршрут апстрима важнее п
     expect(matchSimpleRoute(liveRoutes, '/balance/top-up/platega')?.path).toBe(
       '/balance/top-up/:methodId',
     );
+  });
+
+  it('выбор способа подменяется, и соседи от этого не пострадали (задача #55)', () => {
+    // ⚠️ Литерал `/balance/top-up` заведён рядом с параметром
+    // `/balance/top-up/:methodId` — тремя строками ниже в том же реестре. Проверка
+    // именно тройкой: сам новый путь подменился, экран результата по-прежнему
+    // апстримный (иначе повторился бы блокирующий дефект #53), а экран суммы
+    // по-прежнему достаётся записи с параметром.
+    expect(matchSimpleRoute(liveRoutes, '/balance/top-up')?.path).toBe('/balance/top-up');
+    expect(matchSimpleRoute(liveRoutes, '/balance/top-up/result')).toBeNull();
+    expect(matchSimpleRoute(liveRoutes, '/balance/top-up/platega')?.path).toBe(
+      '/balance/top-up/:methodId',
+    );
+
+    // Путь с параметром метода в адресе результата — тоже апстримный: он на
+    // сегмент длиннее и ни одной записи реестра не достаётся.
+    expect(matchSimpleRoute(liveRoutes, '/balance/top-up/result/lava')).toBeNull();
   });
 
   it('ни один статический маршрут под швом не отдан чужой записи реестра', () => {

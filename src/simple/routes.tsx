@@ -3,6 +3,7 @@ import { useUiMode } from '@/store/mode';
 import { SimpleBalance } from './pages/Balance';
 import { SimpleDashboard } from './pages/Dashboard';
 import { SimpleTopUpAmount } from './pages/TopUpAmount';
+import { SimpleTopUpMethodSelect } from './pages/TopUpMethodSelect';
 import { matchSimpleRoute, type SimpleRoute } from './routeMatch';
 
 export type { SimpleRoute } from './routeMatch';
@@ -43,6 +44,12 @@ export const simpleRoutes: SimpleRoute[] = [
   // которых здесь нет, отдаются апстримными страницами.
   { path: '/', component: SimpleDashboard },
   { path: '/balance', component: SimpleBalance },
+  // ⚠️ Литерал рядом с параметром ниже — и это работает только потому, что
+  // `matchSimpleRoute` ранжирует литералы выше параметров. Порядок записей в
+  // реестре на исход не влияет, но соседей по `App.tsx` при заведении такой пары
+  // проверять обязательно: `/balance/top-up/result` от параметра ниже спасает
+  // список `UPSTREAM_LITERAL_PATHS` в `routeMatch.ts` (дефект #53).
+  { path: '/balance/top-up', component: SimpleTopUpMethodSelect },
   { path: '/balance/top-up/:methodId', component: SimpleTopUpAmount },
 ];
 
