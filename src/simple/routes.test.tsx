@@ -29,6 +29,22 @@ const registeredPaths = [...routesSource.matchAll(/^\s*\{\s*path:\s*'([^']+)'/gm
   (match) => match[1],
 );
 
+/**
+ * Маршруты `App.tsx` под `ProtectedRoute` — то есть покрытые швом.
+ *
+ * Разбор текстом, как и у реестра выше: импортировать `App.tsx` в тест нельзя.
+ * Поднят на уровень модуля, потому что нужен двум сторожам ниже — покрытию шва и
+ * защите литеральных маршрутов апстрима от записи реестра с параметром.
+ */
+const appSource = readFileSync('src/App.tsx', 'utf8');
+const protectedPaths = new Set<string>();
+for (const chunk of appSource.split('<Route').slice(1)) {
+  const path = chunk.match(/path="([^"]+)"/)?.[1];
+  if (path && chunk.includes('<ProtectedRoute')) {
+    protectedPaths.add(path);
+  }
+}
+
 describe('matchSimpleRoute', () => {
   it('корень совпадает точно и не ловит остальные пути', () => {
     expect(matchSimpleRoute(routes, '/')?.path).toBe('/');
@@ -52,12 +68,12 @@ describe('matchSimpleRoute', () => {
 });
 
 describe('состав реестра', () => {
-  it('боевой реестр подменяет главную и баланс', () => {
+  it('боевой реестр подменяет главную, баланс и сумму пополнения', () => {
     // Сторож состава. Раньше здесь стояло ожидание пустого реестра — каркас не
     // подменял ничего; первая простая страница (задача #27) его уронила, как и
     // было задумано. Дальше список растёт задачами милстоуна [M1-E05], и каждая
     // новая страница обязана появиться здесь осознанно.
-    expect(registeredPaths).toEqual(['/', '/balance']);
+    expect(registeredPaths).toEqual(['/', '/balance', '/balance/top-up/:methodId']);
   });
 
   it('пути в реестре не повторяются', () => {
@@ -83,17 +99,6 @@ describe('состав реестра', () => {
  * исключения. Этот сторож ловит такую запись в `npm test`.
  */
 describe('покрытие шва', () => {
-  const appSource = readFileSync('src/App.tsx', 'utf8');
-
-  /** Пути, чей `<Route>` содержит `<ProtectedRoute>` — то есть покрытые швом. */
-  const protectedPaths = new Set<string>();
-  for (const chunk of appSource.split('<Route').slice(1)) {
-    const path = chunk.match(/path="([^"]+)"/)?.[1];
-    if (path && chunk.includes('<ProtectedRoute')) {
-      protectedPaths.add(path);
-    }
-  }
-
   it('разбор App.tsx удался — иначе сторож молча пропускал бы всё', () => {
     // Без этой проверки сломанный разбор дал бы пустое множество, и следующий
     // тест проходил бы всегда, ничего не охраняя.
@@ -113,5 +118,69 @@ describe('покрытие шва', () => {
 
     // Пусто — значит ни одна простая страница не зарегистрирована в никуда.
     expect(uncovered).toEqual([]);
+  });
+});
+
+/**
+ * Запись реестра с параметром шире, чем выглядит: `/balance/top-up/:methodId`
+ * совпадает и с апстримным `/balance/top-up/result` — литеральный сегмент для
+ * `matchPath` такой же сегмент, как любой другой. Шов в `ProtectedRoute` выбирает
+ * страницу по `location.pathname`, а не по выигравшему `<Route>`, поэтому перехват
+ * не остановит ничто: человек, вернувшийся от провайдера, увидит вместо результата
+ * оплаты выбор способа платежа.
+ *
+ * Отсюда два сторожа: точечный на сам этот путь и общий на все статические
+ * маршруты под швом, чтобы следующая страница с параметром не наступила на то же.
+ */
+describe('литеральный маршрут апстрима важнее параметра реестра', () => {
+  /** Реестр как он есть: пути настоящие, для матчинга важны только они. */
+  const liveRoutes: SimpleRoute[] = registeredPaths.map((path) => ({ path, component: Stub }));
+
+  /** Маршруты под швом без параметров — только их может перехватить чужой шаблон. */
+  const staticProtectedPaths = [...protectedPaths].filter((path) => !path.includes(':'));
+
+  it('разбор дал статические пути, и экран результата оплаты среди них', () => {
+    // Без этой пары общий сторож ниже сверял бы пустоту и проходил всегда.
+    expect(staticProtectedPaths.length).toBeGreaterThan(0);
+    expect(staticProtectedPaths).toContain('/balance/top-up/result');
+  });
+
+  it('экран результата оплаты остаётся апстримным, а способ оплаты подменяется', () => {
+    expect(matchSimpleRoute(liveRoutes, '/balance/top-up/result')).toBeNull();
+    expect(matchSimpleRoute(liveRoutes, '/balance/top-up/platega')?.path).toBe(
+      '/balance/top-up/:methodId',
+    );
+  });
+
+  it('ни один статический маршрут под швом не отдан чужой записи реестра', () => {
+    const hijacked = staticProtectedPaths
+      .map((path) => ({ path, override: matchSimpleRoute(liveRoutes, path)?.path ?? null }))
+      .filter(({ path, override }) => override !== null && override !== path);
+
+    // Подмена у статического пути допустима только записью с ровно этим путём.
+    expect(hijacked).toEqual([]);
+  });
+
+  it('литеральная запись реестра сильнее списка апстримных маршрутов', () => {
+    // Список апстримных литералов — не запрет навсегда: когда у простого режима
+    // появится свой экран результата оплаты, он добавится в реестр как литерал и
+    // должен выиграть. Иначе список превратился бы в ловушку.
+    const withResultPage: SimpleRoute[] = [
+      { path: '/balance/top-up/result', component: Stub },
+      { path: '/balance/top-up/:methodId', component: Stub },
+    ];
+
+    expect(matchSimpleRoute(withResultPage, '/balance/top-up/result')?.path).toBe(
+      '/balance/top-up/result',
+    );
+  });
+
+  it('литерал реестра сильнее параметра независимо от порядка записей', () => {
+    const paramFirst: SimpleRoute[] = [
+      { path: '/subscriptions/:id', component: Stub },
+      { path: '/subscriptions/new', component: Stub },
+    ];
+
+    expect(matchSimpleRoute(paramFirst, '/subscriptions/new')?.path).toBe('/subscriptions/new');
   });
 });

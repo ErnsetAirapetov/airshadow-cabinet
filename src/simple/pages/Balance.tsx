@@ -7,11 +7,11 @@ import { useNavigate, useSearchParams } from 'react-router';
 import { balanceApi } from '@/api/balance';
 import { ChevronDownIcon, WalletIcon } from '@/components/icons';
 import { Button } from '@/components/primitives/Button';
-import { API } from '@/config/constants';
 import { useCurrency } from '@/hooks/useCurrency';
 import { useAuthStore } from '@/store/auth';
 import type { PaginatedResponse, Transaction } from '@/types';
 import { uiLocale } from '@/utils/uiLocale';
+import { BalanceWidget, useBalanceQuery } from '../components/BalanceWidget';
 import { SIMPLE_NS } from '../i18n';
 import {
   resolveAccentedMethodId,
@@ -39,9 +39,10 @@ import {
  * (docs/architecture/two-modes.md, «Состав простого режима»), а лишний запрос на
  * странице тоже не нужен.
  *
- * Экраны `/balance/top-up/*` (сумма, результат) в простом режиме НЕ копируются:
- * спеки на них владелец пока не давал. Карточка способа ведёт туда же, куда
- * ведёт апстримная — на апстримный экран суммы.
+ * Экран суммы пополнения (`/balance/top-up/:methodId`) с задачи #53 тоже простой —
+ * `src/simple/pages/TopUpAmount.tsx`, и блок баланса у них общий
+ * (`src/simple/components/BalanceWidget.tsx`). Выбор способа (`/balance/top-up`) и
+ * результат (`/balance/top-up/result*`) остаются апстримными: спеки на них нет.
  *
  * ⚠️ Хром карточек — глобальные классы `bento-card` / `bento-card-hover` из
  * `src/styles/globals.css`, а не апстримный `Card` из `components/data-display`:
@@ -63,12 +64,10 @@ export function SimpleBalance() {
   const navigate = useNavigate();
   const paymentHandledRef = useRef(false);
 
-  const { data: balanceData, refetch: refetchBalance } = useQuery({
-    queryKey: ['balance'],
-    queryFn: balanceApi.getBalance,
-    staleTime: API.BALANCE_STALE_TIME_MS,
-    refetchOnMount: 'always',
-  });
+  // Данные баланса читает виджет; странице нужен только `refetch` после
+  // активации промокода. Параметры запроса объявлены в одном месте — рядом с
+  // виджетом, — поэтому два наблюдателя одного ключа не разъедутся.
+  const { refetch: refetchBalance } = useBalanceQuery();
 
   // Обновляем пользователя на маунте, чтобы баланс в стору совпал с экраном.
   useEffect(() => {
@@ -173,14 +172,8 @@ export function SimpleBalance() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold text-dark-50 sm:text-3xl">{t('balance.title')}</h1>
 
-      {/* Баланс — плоская поверхность, вес несёт крупная цифра. */}
-      <div className="bento-card">
-        <div className="mb-2 text-sm text-dark-400">{t('balance.currentBalance')}</div>
-        <div className="text-4xl font-bold text-dark-50 sm:text-5xl">
-          {formatAmount(balanceData?.balance_rubles || 0)}
-          <span className="ml-2 text-2xl text-dark-400">{currencySymbol}</span>
-        </div>
-      </div>
+      {/* Баланс — общий виджет: тот же блок стоит на экране суммы пополнения. */}
+      <BalanceWidget />
 
       {/* Способы пополнения — сразу под балансом: главное действие экрана. */}
       {paymentMethods && paymentMethods.length > 0 && (
