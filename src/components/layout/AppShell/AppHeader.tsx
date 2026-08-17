@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { useState, useEffect } from 'react';
@@ -10,6 +10,9 @@ import { PiArrowsInSimple } from 'react-icons/pi';
 
 import { useAuthStore } from '@/store/auth';
 import { useModeStore } from '@/store/mode';
+// Реестр простых страниц — один на приложение (#45), импорт разрешён поимённо в
+// scripts/check-mode-boundaries.mjs.
+import { resolveSimpleRoute } from '@/simple/routes';
 import { displayName } from '@/utils/displayName';
 import { useShallow } from 'zustand/shallow';
 import { useTheme } from '@/hooks/useTheme';
@@ -92,9 +95,9 @@ export function AppHeader({
   );
   const { toggleTheme, isDark } = useTheme();
   const { haptic, platform } = usePlatform();
-  // Выход в простой режим виден только в экспертном (#41, канон two-modes.md).
+  // Переключатель режима виден всегда (#45, канон two-modes.md).
   const setMode = useModeStore((state) => state.setMode);
-  const mode = useModeStore((state) => state.mode);
+  const navigate = useNavigate();
   const [userPhotoUrl, setUserPhotoUrl] = useState<string | null>(null);
   const [logoLoaded, setLogoLoaded] = useState(() => isLogoPreloaded());
 
@@ -409,26 +412,26 @@ export function AppHeader({
                   {t('nav.profile')}
                 </Link>
 
-                {/* Выход в простой режим — строкой меню, как в ящике простого
-                    режима (#48). Виден только в экспертном: апстримная шапка
-                    монтируется и в простом режиме, на путях без простой
-                    страницы (#41, #45). Неймспейс подписи написан литералом —
-                    импортировать SIMPLE_NS из src/simple/ апстримному файлу
-                    запрещает гейт границ, а значения он не проверяет. */}
-                {mode === 'expert' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      haptic.impact('light');
-                      setMode('simple');
-                      setMobileMenuOpen(false);
-                    }}
-                    className="nav-item w-full"
-                  >
-                    <PiArrowsInSimple className="h-5 w-5" />
-                    {t('mode.toSimple', { ns: 'simple' })}
-                  </button>
-                )}
+                {/* Переключатель в простой режим — строкой меню, как в ящике
+                    простого режима (#48), и виден в обоих режимах (#45): нет
+                    простой версии пути — уводим на главную, иначе кнопка
+                    мёртвая. Неймспейс подписи литералом (#46): импорт SIMPLE_NS
+                    апстримному файлу запрещает гейт границ. */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    haptic.impact('light');
+                    setMode('simple');
+                    setMobileMenuOpen(false);
+                    if (resolveSimpleRoute(location.pathname) === null) {
+                      navigate('/');
+                    }
+                  }}
+                  className="nav-item w-full"
+                >
+                  <PiArrowsInSimple className="h-5 w-5" />
+                  {t('mode.toSimple', { ns: 'simple' })}
+                </button>
 
                 <button
                   onClick={() => {
