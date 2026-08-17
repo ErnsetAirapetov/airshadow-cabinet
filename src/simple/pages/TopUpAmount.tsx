@@ -29,6 +29,7 @@ import { saveTopUpPendingInfo } from '@/utils/topUpStorage';
 import { BalanceWidget } from '../components/BalanceWidget';
 import {
   resolveInitialAmountRubles,
+  resolveQuickAmountsLayout,
   resolveQuickAmountsRubles,
   resolveSubscriptionAmounts,
 } from './topUpState';
@@ -44,9 +45,13 @@ import {
  *
  *   1. сверху виджет баланса (`BalanceWidget`) — человек видит, сколько денег уже
  *      на счету. На апстримном экране его нет вообще;
- *   2. кнопки быстрых сумм — четыре цены периодов подписки из первого тарифа
- *      витрины, со скидкой промо и отфильтрованные диапазоном метода;
- *   3. поле суммы предзаполнено ценой за один месяц из того же источника.
+ *   2. кнопки быстрых сумм — цены периодов подписки первого доступного тарифа в
+ *      порядке витрины покупки, со скидкой промо, округлённые вверх до целого рубля
+ *      и отфильтрованные диапазоном метода. Кнопок столько, сколько уцелевших
+ *      периодов (спека #56), подписи — только суммы, без сроков;
+ *   3. поле суммы предзаполнено ценой за один месяц из того же источника;
+ *   4. сетка кнопок подстраивается под их число — раскладку считает
+ *      `resolveQuickAmountsLayout`, разметка её только читает (спека #56).
  *
  * Всё остальное перенесено как есть, включая механики, которые легко потерять:
  * канонический рубль (`quickRub`), порядок валидации с rate limit, ветку Telegram
@@ -216,6 +221,17 @@ export function SimpleTopUpAmount() {
   // round-trip that could push a min-amount chip just below the allowed minimum. Cleared
   // as soon as the user edits the field by hand.
   const [quickRub, setQuickRub] = useState<number | null>(null);
+  // ⚠️ Выбранная кнопка быстрой суммы — ПОЗИЦИЯ в списке, а не сумма. Сверка одного
+  // значения поля с подписью кнопки (`amount === val`) зажигала две кнопки сразу:
+  // суммы, совпавшие после округления вверх (25 415 и 25 490 копеек — обе дают
+  // 255 ₽), штатны, периоды при этом разные. Выбор — это то, на что нажали,
+  // поэтому хранится индекс (задача #56). Сбрасывается в `null` и ручным вводом,
+  // и предзаполнением: в обоих случаях в поле лежит уже не сумма кнопки.
+  //
+  // ⚠️ Одной позиции при этом мало: `quickAmounts` пересчитывается на каждый
+  // рендер и МЕНЯЕТ СОСТАВ по ходу жизни экрана, а индекс это переживает. Условие
+  // подсветки поэтому сверяет ещё и значение — разбор в `isSelected` ниже.
+  const [selectedQuickIndex, setSelectedQuickIndex] = useState<number | null>(null);
   // ⚠️ Выключатель предзаполнения. Цены подписки приходят асинхронно, а человек
   // может начать вводить сумму до ответа — и пришедший ответ стёр бы набранное.
   // Ref, а не состояние: перерисовка от него не нужна, а эффекту ниже нужно
@@ -253,9 +269,12 @@ export function SimpleTopUpAmount() {
   // остальные валюты с копейками.
   const currencyDecimals = targetCurrency === 'IRR' || targetCurrency === 'RUB' ? 0 : 2;
   // Значение для поля из точной рублёвой суммы. Поднято выше раннего возврата,
-  // потому что им же пользуется эффект предзаполнения: одна формула на кнопки и
-  // на предзаполнение — иначе выбранная кнопка перестала бы подсвечиваться
-  // (подсветка сравнивает строку в поле с текстом кнопки).
+  // потому что им же пользуется эффект предзаполнения: формула на кнопки и на
+  // предзаполнение обязана быть одна.
+  //
+  // Мотив — совпадение того, что человек читает, с тем, что спишется: рядом с
+  // этой строкой всегда ставится канонический рубль (`quickRub`/`setQuickRub`),
+  // и разойдись формулы, экран показывал бы 254, а списывал 254,15.
   const getQuickValue = useCallback(
     (rub: number) =>
       targetCurrency === 'IRR'
@@ -294,6 +313,10 @@ export function SimpleTopUpAmount() {
     // округлённое значение отображаемой валюты, а списывать надо точное, иначе
     // FX-округление отбивает сумму на границе минимума.
     setQuickRub(rubles);
+    // ⚠️ Выбранной кнопки при предзаполнении нет: в поле лежит цена месяца, а не
+    // нажатие человека. Совпадение цены месяца с какой-то из кнопок — случайность,
+    // и подсвечивать её значило бы показать выбор, которого не было.
+    setSelectedQuickIndex(null);
   }, [
     isPricesLoading,
     method,
@@ -509,6 +532,10 @@ export function SimpleTopUpAmount() {
     method,
     applyDiscount,
   });
+  // Раскладка сетки под фактическое число кнопок (спека #56). Разметка её только
+  // читает: считать классы в JSX нельзя — Tailwind собирает утилиты, сканируя
+  // исходник текстом, и класс из шаблонной строки в CSS не попал бы вообще.
+  const quickAmountsLayout = resolveQuickAmountsLayout(quickAmounts.length);
   const isPending = topUpMutation.isPending || starsPaymentMutation.isPending;
 
   const handleOpenPayment = () => {
@@ -607,6 +634,7 @@ export function SimpleTopUpAmount() {
                 amountTouchedRef.current = true;
                 setAmount(e.target.value);
                 setQuickRub(null);
+                setSelectedQuickIndex(null);
               }}
               onFocus={() => setIsInputFocused(true)}
               onBlur={() => setIsInputFocused(false)}
@@ -648,15 +676,40 @@ export function SimpleTopUpAmount() {
         </div>
       </div>
 
-      {/* Quick amount buttons */}
+      {/* Quick amount buttons — по одной на период тарифа (спека #56) */}
       {quickAmounts.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {quickAmounts.map((a) => {
+        <div className={quickAmountsLayout.gridClassName}>
+          {quickAmounts.map((a, index) => {
             const val = getQuickValue(a);
-            const isSelected = amount === val;
+            // ⚠️ Позиция И значение — оба слагаемых обязательны (задача #56).
+            //
+            // Позиция — дискриминатор: две кнопки с одинаковой после округления
+            // вверх суммой штатны (периоды разные, цена совпала), и сверка одного
+            // значения зажигала обе.
+            //
+            // Значение — страховка от протухшего индекса: `quickAmounts`
+            // пересчитывается на каждый рендер и МЕНЯЕТ СОСТАВ по ходу жизни
+            // экрана. Кнопки рисуются сразу, ещё на апстримном фолбэке, пока
+            // запрос цен летит; инвалидация после промокода меняет суммы вообще
+            // без смены длины списка. Индекс это переживает — сбрасывают его
+            // только ручной ввод и предзаполнение, а предзаполнение после
+            // нажатия выключено навсегда (`amountTouchedRef`). Без сверки
+            // значения экран врал бы: в поле 500, горит кнопка 799.
+            //
+            // Выбран этот вариант, а не сброс индекса эффектом по слепку списка:
+            // тот же результат ценой ещё одного эффекта и ещё одного состояния,
+            // а деградирует он одинаково — подсветка гаснет, а не переезжает на
+            // чужую кнопку.
+            const isSelected = selectedQuickIndex === index && amount === val;
+            // Последняя кнопка добирает остаток неполной строки — иначе в хвосте
+            // сетки зияет дыра. Класс считает чистая функция раскладки.
+            const isLastAmount = index === quickAmounts.length - 1;
             return (
               <BentoCard
-                key={a}
+                // ⚠️ Ключ по ИНДЕКСУ, а не по сумме: две цены после скидки могут
+                // совпасть, и одинаковый ключ зажигал бы подсветку сразу на обеих
+                // кнопках (задача #56).
+                key={index}
                 as="button"
                 type="button"
                 onClick={() => {
@@ -665,13 +718,14 @@ export function SimpleTopUpAmount() {
                   amountTouchedRef.current = true;
                   setAmount(val);
                   setQuickRub(a);
+                  setSelectedQuickIndex(index);
                   inputRef.current?.blur();
                 }}
                 hover
                 glow={isSelected}
                 className={`flex flex-col items-center justify-center px-2 py-3 ${
                   isSelected ? 'border-accent-500/50 bg-accent-500/10' : ''
-                }`}
+                } ${isLastAmount ? quickAmountsLayout.lastItemClassName : ''}`}
               >
                 <span
                   className={`text-base font-bold ${isSelected ? 'text-accent-400' : 'text-dark-200'}`}
