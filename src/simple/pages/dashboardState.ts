@@ -126,10 +126,18 @@ export function resolveExpiredCardAction(params: {
 
 export type TimeLeftUnit = 'days' | 'hours' | 'minutes';
 
-export interface TimeLeftDisplay {
-  value: number;
-  unit: TimeLeftUnit;
-}
+/**
+ * Что печатать в крупной цифре плитки «Осталось».
+ *
+ * Размеченное объединение, а не `{ value, unit }` с особым значением: ниже минуты
+ * единицы нет, поэтому у последней ступени цифры не существует в принципе. Тип
+ * заодно работает сторожем — `timeLeft.value` на объединении не компилируется, и
+ * карточка не может молча отрисовать терминальную ветку числом (#50).
+ */
+export type TimeLeftDisplay =
+  | { kind: 'unit'; value: number; unit: TimeLeftUnit }
+  /** Меньше минуты: подписка ещё жива, а цифры для неё уже нет. */
+  | { kind: 'underMinute' };
 
 /**
  * Крупная цифра плитки «Осталось» на активной карточке подписки.
@@ -148,13 +156,34 @@ export interface TimeLeftDisplay {
  * минуты) — уже своё правило, продиктованное версткой плитки: цифра тут одна,
  * конкатенация двух единиц в неё не поместится. Сторож в `dashboardState.test.ts`
  * читает апстримный файл текстом и проверяет, что заимствованная часть на месте.
+ *
+ * ⚠️ Последняя ступень — не цифра (#50). Тем же округлением вниз в последнюю
+ * минуту обнуляется и `minutes_left`, а спускаться дальше некуда: единицы ниже
+ * минуты нет. Поэтому спуск заканчивается терминальной формулировкой «меньше
+ * минуты» — иначе живая подписка показывала бы «0 м», то есть тот же дефект
+ * третьим этажом (#34 — дни, #38 — часы). Ноль тут особенно живуч: запрос
+ * подписки не поллится (`staleTime` плюс выключенный `refetchOnWindowFocus`),
+ * так что снапшот висел бы на открытой вкладке сколько угодно.
+ *
+ * Условие терминальной ветки — «ни одной положительной единицы у живой
+ * подписки», а не «все три ровно нули»: отрицательный остаток от рассинхрона
+ * часов читается на плитке ровно так же плохо, как ноль. Истёкшая и отключённая
+ * в эту ветку не попадают — им обещать «ещё чуть-чуть работает» нельзя, и на
+ * главной у них своя карточка (`SubscriptionCardExpired`), где плитки остатка
+ * нет вообще.
  */
 export function resolveTimeLeftDisplay(subscription: Subscription): TimeLeftDisplay {
   if (subscription.days_left > 0) {
-    return { value: subscription.days_left, unit: 'days' };
+    return { kind: 'unit', value: subscription.days_left, unit: 'days' };
   }
   if (subscription.hours_left > 0) {
-    return { value: subscription.hours_left, unit: 'hours' };
+    return { kind: 'unit', value: subscription.hours_left, unit: 'hours' };
   }
-  return { value: subscription.minutes_left, unit: 'minutes' };
+  if (subscription.minutes_left > 0) {
+    return { kind: 'unit', value: subscription.minutes_left, unit: 'minutes' };
+  }
+  if (isExpired(subscription)) {
+    return { kind: 'unit', value: subscription.minutes_left, unit: 'minutes' };
+  }
+  return { kind: 'underMinute' };
 }

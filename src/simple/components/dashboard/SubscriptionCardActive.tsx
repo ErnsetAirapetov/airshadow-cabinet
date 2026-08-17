@@ -14,6 +14,7 @@ import { HoverBorderGradient } from '@/components/ui/hover-border-gradient';
 import { CalendarIcon, RefreshIcon } from '@/components/icons';
 import { useHaptic } from '@/platform';
 import type { Subscription } from '@/types';
+import { SIMPLE_NS } from '../../i18n';
 import { resolveRenewHref, resolveTimeLeftDisplay } from '../../pages/dashboardState';
 
 /**
@@ -46,6 +47,7 @@ export default function SubscriptionCardActive({
   connectedDevices,
 }: SubscriptionCardActiveProps) {
   const { t } = useTranslation();
+  const { t: tSimple } = useTranslation(SIMPLE_NS);
   const navigate = useNavigate();
   const { isDark } = useTheme();
   const g = getGlassColors(isDark);
@@ -73,14 +75,18 @@ export default function SubscriptionCardActive({
   // «0 ч.» (#38). Правило (спускаться на следующую единицу) заимствовано у
   // апстримного приёма на странице подписки (Subscription.tsx), вынесено в
   // resolveTimeLeftDisplay — см. докстринг и сторож в dashboardState.test.ts.
+  // Ниже минуты единицы нет, поэтому на последней ступени цифры не существует:
+  // живой подписке вместо «0 м» достаётся терминальная формулировка (#50).
   const timeLeft = resolveTimeLeftDisplay(subscription);
-  const timeLeftValue = timeLeft.value;
-  const timeLeftUnit =
-    timeLeft.unit === 'days'
-      ? t('subscription.daysShort')
-      : timeLeft.unit === 'hours'
-        ? t('subscription.hours')
-        : t('subscription.minutes');
+  const timeLeftValue = timeLeft.kind === 'unit' ? timeLeft.value : null;
+  const timeLeftLabel =
+    timeLeft.kind === 'underMinute'
+      ? tSimple('dashboard.timeLeftUnderMinute')
+      : timeLeft.unit === 'days'
+        ? t('subscription.daysShort')
+        : timeLeft.unit === 'hours'
+          ? t('subscription.hours')
+          : t('subscription.minutes');
 
   // Sparkline placeholder data (hidden until API provides daily usage)
   const dailyUsage: number[] = [];
@@ -342,13 +348,29 @@ export default function SubscriptionCardActive({
             {t('dashboard.remaining')}
           </div>
           <div className="flex items-baseline gap-1">
-            <span
-              className="text-[22px] font-bold tracking-tight transition-colors duration-300"
-              style={{ color: daysLeft <= 3 ? 'rgb(var(--color-warning-400))' : g.text }}
-            >
-              {timeLeftValue}
-            </span>
-            <span className="text-xs font-medium text-dark-50/25">{timeLeftUnit}</span>
+            {/* Терминальная ветка (#50) печатает одну формулировку вместо пары
+                «цифра + единица»: цифры для неё не существует, а «0 м» живой
+                подписке читается как «уже кончилась». Кегль меньше, чем у
+                цифры, — фраза длиннее и в половину ширины строки иначе не
+                влезает; цвет остаётся предупреждающим, как у остатка в три дня. */}
+            {timeLeftValue === null ? (
+              <span
+                className="text-[15px] font-bold leading-tight tracking-tight transition-colors duration-300"
+                style={{ color: daysLeft <= 3 ? 'rgb(var(--color-warning-400))' : g.text }}
+              >
+                {timeLeftLabel}
+              </span>
+            ) : (
+              <>
+                <span
+                  className="text-[22px] font-bold tracking-tight transition-colors duration-300"
+                  style={{ color: daysLeft <= 3 ? 'rgb(var(--color-warning-400))' : g.text }}
+                >
+                  {timeLeftValue}
+                </span>
+                <span className="text-xs font-medium text-dark-50/25">{timeLeftLabel}</span>
+              </>
+            )}
           </div>
         </Link>
       </div>
