@@ -101,3 +101,60 @@ export function resolveRenewHref(subscription: Subscription): string {
   }
   return `/subscriptions/${subscription.id}/renew`;
 }
+
+export type ExpiredCardAction = 'renew' | 'topUp';
+
+/**
+ * Единственная кнопка карточки истёкшей платной подписки: продление или
+ * пополнение баланса — без развилки «две кнопки рядом» (#49).
+ *
+ * `hasBalance` — грубая проверка «есть хоть немного денег» (порог в
+ * `SubscriptionCardExpired`), она не знает цену продления. Поэтому реальный
+ * отказ `renewSubscription` по нехватке средств (баланс есть, но меньше
+ * цены) обязан перебивать `hasBalance`: иначе кнопка «Продлить» осталась бы
+ * висеть после отказа без единого рабочего действия на экране.
+ */
+export function resolveExpiredCardAction(params: {
+  hasBalance: boolean;
+  renewFailedInsufficientBalance: boolean;
+}): ExpiredCardAction {
+  if (params.renewFailedInsufficientBalance) {
+    return 'topUp';
+  }
+  return params.hasBalance ? 'renew' : 'topUp';
+}
+
+export type TimeLeftUnit = 'days' | 'hours' | 'minutes';
+
+export interface TimeLeftDisplay {
+  value: number;
+  unit: TimeLeftUnit;
+}
+
+/**
+ * Крупная цифра плитки «Осталось» на активной карточке подписки.
+ *
+ * Бэкенд отдаёт `days_left` округлением вниз (`delta.days`), поэтому в
+ * последние сутки живой подписки поле равно нулю — плитка показывала бы
+ * «0 дн.», и человек читал бы это как «уже кончилась» (#34). Тем же
+ * округлением вниз `hours_left` обнуляется в последний час — без отдельной
+ * ветки плитка показывала бы «0 ч.» (#38).
+ *
+ * Приём заимствован у апстримного `src/pages/Subscription.tsx` (~ строка 881,
+ * блок инфо о триале): там при `days_left <= 0` показываются `hours_left` и
+ * `minutes_left` — но апстрим спускается только на один уровень и дальше
+ * склеивает обе единицы в одну строку (`0ч 45м`), по `minutes_left` отдельно
+ * не ветвится. Спуск ещё на один уровень (часы кончились — показать одни
+ * минуты) — уже своё правило, продиктованное версткой плитки: цифра тут одна,
+ * конкатенация двух единиц в неё не поместится. Сторож в `dashboardState.test.ts`
+ * читает апстримный файл текстом и проверяет, что заимствованная часть на месте.
+ */
+export function resolveTimeLeftDisplay(subscription: Subscription): TimeLeftDisplay {
+  if (subscription.days_left > 0) {
+    return { value: subscription.days_left, unit: 'days' };
+  }
+  if (subscription.hours_left > 0) {
+    return { value: subscription.hours_left, unit: 'hours' };
+  }
+  return { value: subscription.minutes_left, unit: 'minutes' };
+}
