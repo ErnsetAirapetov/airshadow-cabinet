@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { matchSimpleRoute, type SimpleRoute } from './routeMatch';
+import { matchSimpleRoute, type SimpleRoute, UPSTREAM_LITERAL_PATHS } from './routeMatch';
 
 const Stub = () => null;
 
@@ -195,6 +195,39 @@ describe('литеральный маршрут апстрима важнее п
     expect(matchSimpleRoute(withResultPage, '/balance/top-up/result')?.path).toBe(
       '/balance/top-up/result',
     );
+  });
+
+  /**
+   * Список апстримных литералов — ручная копия знаний `App.tsx`, и разъехаться с
+   * оригиналом она может в обе стороны. Забытое пополнение ловит общий сторож
+   * выше (статический маршрут под швом, отданный чужой записи реестра).
+   * Обратную сторону — **протухание** — не ловил никто: апстрим убрал маршрут,
+   * запись осталась, и она навсегда молча запрещает подмену этого адреса, в том
+   * числе когда простому режиму понадобится там своя страница. Ни сборка, ни
+   * тесты об этом не скажут: лишний путь в списке просто никогда не совпадает.
+   */
+  describe('список апстримных литералов не протух', () => {
+    /** Запись годна, только если это реально существующий статический путь под швом. */
+    const isLiveStaticPath = (path: string) => !path.includes(':') && protectedPaths.has(path);
+
+    it('проверка различает живой путь, выдуманный и параметр — иначе она пустая', () => {
+      // Пара «разбор удался» для предиката, а не для регулярки: сам предикат
+      // держится на `protectedPaths`, и стоит разбору `App.tsx` съехать — проверка
+      // ниже начала бы валить корректный список вместо протухшего. Три контроля:
+      // живой путь принимается, несуществующий и параметр отвергаются.
+      expect(isLiveStaticPath('/balance/top-up/result')).toBe(true);
+      expect(isLiveStaticPath('/balance/top-up/gone')).toBe(false);
+      expect(isLiveStaticPath('/balance/top-up/:methodId')).toBe(false);
+    });
+
+    it('каждая запись списка — существующий статический маршрут под ProtectedRoute', () => {
+      const stale = UPSTREAM_LITERAL_PATHS.filter((path) => !isLiveStaticPath(path));
+
+      // Пусто — значит список описывает сегодняшний `App.tsx`, а не вчерашний.
+      // Пустой список сам по себе законен: апстрим может убрать последнего
+      // литерального соседа, и тогда сторожить будет нечего.
+      expect(stale).toEqual([]);
+    });
   });
 
   it('литерал реестра сильнее параметра независимо от порядка записей', () => {
