@@ -10,7 +10,8 @@
     "greeting": "Welcome,",
     "errorTitle": "Could not load the subscription",
     "errorHint": "Looks like the server is unreachable.",
-    "retry": "Try again"
+    "retry": "Try again",
+    "timeLeftUnderMinute": "Less than a minute"
   },
   "balance": {
     "promocode": {

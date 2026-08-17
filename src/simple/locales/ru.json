@@ -10,7 +10,8 @@
     "greeting": "Добро пожаловать,",
     "errorTitle": "Не удалось загрузить подписку",
     "errorHint": "Похоже, пропала связь с сервером.",
-    "retry": "Повторить"
+    "retry": "Повторить",
+    "timeLeftUnderMinute": "Меньше минуты"
   },
   "balance": {
     "promocode": {

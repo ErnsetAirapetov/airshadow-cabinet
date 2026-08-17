@@ -160,6 +160,7 @@ describe('resolveTimeLeftDisplay', () => {
 
   it('больше суток осталось — дни', () => {
     expect(resolveTimeLeftDisplay(sub({ days_left: 5, hours_left: 10, minutes_left: 0 }))).toEqual({
+      kind: 'unit',
       value: 5,
       unit: 'days',
     });
@@ -167,6 +168,7 @@ describe('resolveTimeLeftDisplay', () => {
 
   it('последние сутки — часы (#34)', () => {
     expect(resolveTimeLeftDisplay(sub({ days_left: 0, hours_left: 8, minutes_left: 40 }))).toEqual({
+      kind: 'unit',
       value: 8,
       unit: 'hours',
     });
@@ -177,16 +179,55 @@ describe('resolveTimeLeftDisplay', () => {
     // последние сутки (#34) — то же округление вниз. Плитка показывала бы «0 ч.»
     // живой подписке, которой осталось меньше часа.
     expect(resolveTimeLeftDisplay(sub({ days_left: 0, hours_left: 0, minutes_left: 45 }))).toEqual({
+      kind: 'unit',
       value: 45,
       unit: 'minutes',
     });
   });
 
-  it('последняя минута — 0 минут, не более ранняя единица', () => {
+  it('последняя минута — терминальная формулировка вместо нуля (#50)', () => {
+    // Третий этаж той же болезни (#34 — дни, #38 — часы): в последнюю минуту
+    // бэкенд обнуляет и minutes_left, и плитка показывала живой подписке «0 м».
+    // Спускаться дальше некуда — ниже минуты единицы нет, поэтому цифру
+    // заменяет терминальная формулировка. Ноль как значение здесь запрещён.
     expect(resolveTimeLeftDisplay(sub({ days_left: 0, hours_left: 0, minutes_left: 0 }))).toEqual({
-      value: 0,
-      unit: 'minutes',
+      kind: 'underMinute',
     });
+  });
+
+  it('отрицательный остаток у живой подписки — тоже терминальная формулировка', () => {
+    // Класс дефекта, а не его этаж: любая неположительная цифра на плитке живой
+    // подписки читается как «уже кончилась». Рассинхрон часов клиента и сервера
+    // даёт отрицательные значения так же легко, как округление вниз даёт нули.
+    expect(
+      resolveTimeLeftDisplay(sub({ days_left: -1, hours_left: -2, minutes_left: -30 })),
+    ).toEqual({ kind: 'underMinute' });
+  });
+
+  it('истёкшая подписка ведёт себя как раньше — 0 минут, у неё своя карточка', () => {
+    // Терминальная формулировка обещает «ещё чуть-чуть работает», поэтому
+    // истёкшей она не достаётся. На главной такая подписка попадает в
+    // SubscriptionCardExpired, где плитки остатка нет вообще.
+    expect(
+      resolveTimeLeftDisplay(
+        sub({
+          status: 'expired',
+          is_active: false,
+          is_expired: true,
+          days_left: 0,
+          hours_left: 0,
+          minutes_left: 0,
+        }),
+      ),
+    ).toEqual({ kind: 'unit', value: 0, unit: 'minutes' });
+  });
+
+  it('отключённая подписка (disabled) — тоже 0 минут, а не «меньше минуты»', () => {
+    expect(
+      resolveTimeLeftDisplay(
+        sub({ status: 'disabled', is_active: false, days_left: 0, hours_left: 0, minutes_left: 0 }),
+      ),
+    ).toEqual({ kind: 'unit', value: 0, unit: 'minutes' });
   });
 });
 
@@ -242,6 +283,41 @@ describe('resolveRenewHref', () => {
     expect(resolveRenewHref(sub({ is_limited: true, is_expired: true }))).toBe(
       '/subscription/purchase',
     );
+  });
+});
+
+/**
+ * Сторож карточки: терминальную ветку нельзя отрисовать цифрой (#50).
+ *
+ * Чистая функция отдаёт `{ kind: 'underMinute' }` без значения, и `timeLeft.value`
+ * на объединении не компилируется — но `timeLeft.kind === 'unit' ? timeLeft.value : 0`
+ * компилируется прекрасно, и дефект вернулся бы со зелёной сборкой. Плитку самой
+ * карточки проверить нечем: компонентных тестов в репе не бывает
+ * (`vitest.config.ts`, `environment: 'node'`), поэтому файл читается ТЕКСТОМ —
+ * тем же приёмом, что сторожа шапки и страницы баланса.
+ */
+describe('плитка остатка не печатает цифру в терминальной ветке (#50)', () => {
+  const card = readFileSync('src/simple/components/dashboard/SubscriptionCardActive.tsx', 'utf8');
+  const ru = JSON.parse(readFileSync('src/simple/locales/ru.json', 'utf8')) as {
+    dashboard: Record<string, string>;
+  };
+
+  it('разбор удался — иначе сторож сверял бы пустоту', () => {
+    expect(card).toContain('resolveTimeLeftDisplay(subscription)');
+  });
+
+  it('в терминальной ветке цифры нет вообще', () => {
+    expect(card).toMatch(/timeLeft\.kind === 'unit'\s*\?\s*timeLeft\.value\s*:\s*null/);
+  });
+
+  it('вместо цифры — наша строка из неймспейса простого режима', () => {
+    expect(card).toContain("tSimple('dashboard.timeLeftUnderMinute')");
+  });
+
+  it('строка, которую печатает карточка, в локали есть', () => {
+    // Ключ, потерянный при переименовании, i18next печатает как есть —
+    // человек увидел бы на плитке `dashboard.timeLeftUnderMinute`.
+    expect(ru.dashboard.timeLeftUnderMinute).toBeTruthy();
   });
 });
 
