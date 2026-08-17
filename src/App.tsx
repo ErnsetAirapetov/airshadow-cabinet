@@ -22,8 +22,9 @@ function lazyWithRetry<T extends ComponentType<unknown>>(factory: () => Promise<
 }
 import { useBlockingStore } from './store/blocking';
 import Layout from './components/layout/Layout';
-// Простой режим. Единственный апстримный файл, которому разрешено импортировать
-// из src/simple/ — см. docs/architecture/two-modes.md.
+// Простой режим. Один из трёх апстримных файлов, которым разрешено импортировать
+// из src/simple/ — полный список см. SEAMS в scripts/check-mode-boundaries.mjs и
+// раздел «Поимённый список: SEAMS» в docs/architecture/two-modes.md.
 import { SimpleShell, useSimpleOverride } from './simple';
 import PageLoader from './components/common/PageLoader';
 import {
