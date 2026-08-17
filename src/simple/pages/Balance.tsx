@@ -195,9 +195,11 @@ export function SimpleBalance() {
               const translatedDesc = t(`balance.paymentMethods.${methodKey}.description`, {
                 defaultValue: '',
               });
-              // ⚠️ Акцент — первому ДОСТУПНОМУ способу, решает
-              // `resolveAccentedMethodId`, а не условие в разметке: три его ветки
-              // (пусто / все недоступны / недоступный первым) покрыты тестом.
+              // ⚠️ Акцент — буквально первой карточке списка, независимо от
+              // доступности (решение владельца 17.08.2026, #52). Решает
+              // `resolveAccentedMethodId`, а не условие в разметке: его ветки
+              // (пусто / данных нет / все недоступны / недоступный первым)
+              // покрыты тестом.
               const isAccented = method.id === accentedMethodId;
 
               return (
@@ -215,15 +217,33 @@ export function SimpleBalance() {
                     method.is_available
                       ? 'bento-card-hover'
                       : 'bento-card cursor-not-allowed opacity-50',
-                    // ⚠️ Hover-варианты акцента обязательны, а не украшение:
+                    // Акцент в покое: рамка, градиентная подсветка, свечение и
+                    // ширина строки сетки от `sm`. Условие — только `isAccented`:
+                    // акцент есть и у недоступной первой карточки (#52).
+                    isAccented
+                      ? 'border-accent-500/40 bg-gradient-to-br from-accent-500/10 shadow-glow sm:col-span-2 lg:col-span-3'
+                      : '',
+                    // ⚠️ Hover-варианты акцента — отдельной ветвью и ТОЛЬКО
+                    // доступной карточке (#52): на приглушённой некликабельной
+                    // подсветка под курсором зовёт нажать на то, что не нажимается.
+                    //
+                    // Доступной они обязательны, а не украшение:
                     // `.bento-card-hover:hover` из `src/styles/globals.css` — это
                     // специфичность 0,2,0, и она перебивает утилиты
                     // `border-accent-500/40` и `shadow-glow` (0,1,0). Без них под
                     // курсором акцентная карточка сереет и выглядит как все
                     // остальные. Hover-варианты тоже 0,2,0, но живут в
                     // `@layer utilities` — ниже по источнику, поэтому выигрывают.
-                    isAccented
-                      ? 'border-accent-500/40 bg-gradient-to-br from-accent-500/10 shadow-glow hover:border-accent-500/60 hover:shadow-glow sm:col-span-2 lg:col-span-3'
+                    // Недоступной карточке перебивать нечего: класса
+                    // `bento-card-hover` у неё нет, поэтому правила
+                    // `.bento-card-hover:hover` по ней не срабатывают. А вот
+                    // utility-варианты `hover:` сработали бы и на `disabled`:
+                    // браузер шлёт `:hover` и по выключенной кнопке, класс-гейта у
+                    // утилит нет. Именно поэтому их недоступной карточке и не
+                    // выдают — иначе она подсвечивалась бы под курсором, оставаясь
+                    // ненажимаемой.
+                    isAccented && method.is_available
+                      ? 'hover:border-accent-500/60 hover:shadow-glow'
                       : '',
                   ]
                     .filter(Boolean)
