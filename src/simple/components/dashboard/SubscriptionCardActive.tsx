@@ -14,7 +14,7 @@ import { HoverBorderGradient } from '@/components/ui/hover-border-gradient';
 import { CalendarIcon, RefreshIcon } from '@/components/icons';
 import { useHaptic } from '@/platform';
 import type { Subscription } from '@/types';
-import { resolveRenewHref } from '../../pages/dashboardState';
+import { resolveRenewHref, resolveTimeLeftDisplay } from '../../pages/dashboardState';
 
 /**
  * Копия апстримной `src/components/dashboard/SubscriptionCardActive.tsx`.
@@ -68,12 +68,19 @@ export default function SubscriptionCardActive({
 
   // Последние сутки: бэкенд отдаёт days_left = 0 (`delta.days`, округление
   // вниз), и плитка показывала бы «0 дн.» живой подписке — человек читает это
-  // как «уже кончилась». Апстрим в этом месте так и делает, но на странице
-  // подписки у него же есть готовый приём: часы и минуты (Subscription.tsx).
-  // Забираем его сюда, ключи локалей апстримные.
-  const showHours = daysLeft <= 0 && !subscription.is_expired;
-  const timeLeftValue = showHours ? subscription.hours_left : daysLeft;
-  const timeLeftUnit = showHours ? t('subscription.hours') : t('subscription.daysShort');
+  // как «уже кончилась» (#34). Тем же округлением вниз в последний час
+  // обнуляется и hours_left — без запасной единицы плитка показывала бы
+  // «0 ч.» (#38). Правило (спускаться на следующую единицу) заимствовано у
+  // апстримного приёма на странице подписки (Subscription.tsx), вынесено в
+  // resolveTimeLeftDisplay — см. докстринг и сторож в dashboardState.test.ts.
+  const timeLeft = resolveTimeLeftDisplay(subscription);
+  const timeLeftValue = timeLeft.value;
+  const timeLeftUnit =
+    timeLeft.unit === 'days'
+      ? t('subscription.daysShort')
+      : timeLeft.unit === 'hours'
+        ? t('subscription.hours')
+        : t('subscription.minutes');
 
   // Sparkline placeholder data (hidden until API provides daily usage)
   const dailyUsage: number[] = [];

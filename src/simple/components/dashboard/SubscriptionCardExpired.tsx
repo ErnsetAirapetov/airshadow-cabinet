@@ -12,6 +12,19 @@ import { useHapticFeedback } from '@/platform/hooks/useHaptic';
 import { getGlassColors } from '@/utils/glassTheme';
 import { getInsufficientBalanceError } from '@/utils/subscriptionHelpers';
 import { ClockIcon, ExclamationIcon, PlusIcon, SubscriptionIcon } from '@/components/icons';
+import { resolveExpiredCardAction } from '../../pages/dashboardState';
+
+/**
+ * Копия апстримной `src/components/dashboard/SubscriptionCardExpired.tsx`.
+ *
+ * Упрощено относительно апстрима (#49): в состоянии истёкшей платной подписки
+ * убрана вторая кнопка «Тарифы» — она уводила вбок с маршрута оплаты, рядом с
+ * которым и так стоит кнопка продления/пополнения. У истёкшего триала
+ * продлевать нечем (баланс триал не покрывает), поэтому там кнопка витрины
+ * остаётся — единственное действие карточки, без неё состояние осталось бы
+ * без единого действия. Состояние `limited` (исчерпанный трафик) не тронуто —
+ * там и раньше была одна кнопка.
+ */
 
 interface SubscriptionCardExpiredProps {
   subscription: Subscription;
@@ -37,6 +50,10 @@ export default function SubscriptionCardExpired({
 
   const [isRenewing, setIsRenewing] = useState(false);
   const [renewError, setRenewError] = useState<string | null>(null);
+  // Реальный отказ renewSubscription по нехватке средств — грубая проверка
+  // hasBalance ниже не знает цену продления, поэтому отказ обязан перебивать
+  // её результат (см. resolveExpiredCardAction).
+  const [renewFailedInsufficientBalance, setRenewFailedInsufficientBalance] = useState(false);
 
   const formattedDate = new Date(subscription.end_date).toLocaleDateString(uiLocale());
 
@@ -50,10 +67,15 @@ export default function SubscriptionCardExpired({
   // For daily subs, check if balance covers daily price; otherwise 100 kopeks minimum
   const dailyPrice = subscription.daily_price_kopeks ?? 0;
   const hasBalance = isDaily ? balanceKopeks >= dailyPrice && dailyPrice > 0 : balanceKopeks >= 100;
+  const expiredCardAction = resolveExpiredCardAction({
+    hasBalance,
+    renewFailedInsufficientBalance,
+  });
 
   const handleQuickRenew = async () => {
     setIsRenewing(true);
     setRenewError(null);
+    setRenewFailedInsufficientBalance(false);
     haptic.buttonPressHeavy();
 
     try {
@@ -81,6 +103,7 @@ export default function SubscriptionCardExpired({
       const insufficientData = getInsufficientBalanceError(err);
       if (insufficientData) {
         setRenewError(t('dashboard.expired.insufficientFunds'));
+        setRenewFailedInsufficientBalance(true);
       } else if (err instanceof AxiosError) {
         const detail = err.response?.data?.detail;
         if (typeof detail === 'string') {
@@ -253,74 +276,64 @@ export default function SubscriptionCardExpired({
             <PlusIcon className="h-4 w-4" />
             {t('subscription.buyTraffic')}
           </Link>
-        ) : (
-          <>
-            {/* Quick Renew or Top Up button (hidden for expired trials) */}
-            {!subscription.is_trial && (
-              <>
-                {hasBalance ? (
-                  <button
-                    type="button"
-                    onClick={handleQuickRenew}
-                    disabled={isRenewing}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold tracking-tight text-white transition-all duration-300 disabled:opacity-50"
-                    style={{
-                      background: accent.gradient,
-                      boxShadow: `0 4px 20px rgba(${accent.r},${accent.g},${accent.b},0.2)`,
-                    }}
-                  >
-                    {isRenewing ? (
-                      <span
-                        className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <SubscriptionIcon className="h-4 w-4" />
-                    )}
-                    {isRenewing
-                      ? t('common.loading')
-                      : isDisabledDaily
-                        ? t('dashboard.suspended.resume')
-                        : t('dashboard.expired.quickRenew')}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={handleTopUp}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold tracking-tight text-white transition-all duration-300"
-                    style={{
-                      background: accent.gradient,
-                      boxShadow: `0 4px 20px rgba(${accent.r},${accent.g},${accent.b},0.2)`,
-                    }}
-                  >
-                    <PlusIcon className="h-4 w-4" />
-                    {t('dashboard.expired.topUp')}
-                  </button>
-                )}
-              </>
+        ) : subscription.is_trial ? (
+          // Истёкший триал продлевать нечем (баланс не покрывает пробный
+          // период) — единственный маршрут вперёд это выбор платного тарифа,
+          // поэтому кнопка витрины остаётся как единственное действие карточки.
+          <Link
+            to="/subscription/purchase"
+            className="flex flex-1 items-center justify-center rounded-[14px] px-5 py-3.5 text-[15px] font-semibold tracking-tight text-white transition-colors duration-200"
+            style={{
+              background: accent.gradient,
+              boxShadow: `0 4px 20px rgba(${accent.r},${accent.g},${accent.b},0.2)`,
+            }}
+          >
+            {t('dashboard.expired.tariffs')}
+          </Link>
+        ) : expiredCardAction === 'renew' ? (
+          // #49: кнопка витрины тарифов убрана — из истёкшей подписки ведём
+          // по одному маршруту оплаты (продление/пополнение), без развилки.
+          <button
+            type="button"
+            onClick={handleQuickRenew}
+            disabled={isRenewing}
+            className="flex flex-1 items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold tracking-tight text-white transition-all duration-300 disabled:opacity-50"
+            style={{
+              background: accent.gradient,
+              boxShadow: `0 4px 20px rgba(${accent.r},${accent.g},${accent.b},0.2)`,
+            }}
+          >
+            {isRenewing ? (
+              <span
+                className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
+                aria-hidden="true"
+              />
+            ) : (
+              <SubscriptionIcon className="h-4 w-4" />
             )}
-
-            {/* Tariffs (go to purchase page) — full-width for trials */}
-            <Link
-              to="/subscription/purchase"
-              className={`flex items-center justify-center rounded-[14px] px-5 py-3.5 text-[15px] font-semibold tracking-tight transition-colors duration-200 ${
-                subscription.is_trial ? 'flex-1 text-white' : 'text-dark-50/50'
-              }`}
-              style={
-                subscription.is_trial
-                  ? {
-                      background: accent.gradient,
-                      boxShadow: `0 4px 20px rgba(${accent.r},${accent.g},${accent.b},0.2)`,
-                    }
-                  : {
-                      background: g.innerBg,
-                      border: `1px solid ${g.innerBorder}`,
-                    }
-              }
-            >
-              {t('dashboard.expired.tariffs')}
-            </Link>
-          </>
+            {isRenewing
+              ? t('common.loading')
+              : isDisabledDaily
+                ? t('dashboard.suspended.resume')
+                : t('dashboard.expired.quickRenew')}
+          </button>
+        ) : (
+          // Баланса не хватает — на пополнение той же кнопкой заменяется и
+          // продление до попытки (hasBalance=false), и продление, отказавшее
+          // по нехватке средств (недостаточно для цены). Кнопка одна и та же
+          // (см. resolveExpiredCardAction), развилки на экране нет.
+          <button
+            type="button"
+            onClick={handleTopUp}
+            className="flex flex-1 items-center justify-center gap-2 rounded-[14px] py-3.5 text-[15px] font-semibold tracking-tight text-white transition-all duration-300"
+            style={{
+              background: accent.gradient,
+              boxShadow: `0 4px 20px rgba(${accent.r},${accent.g},${accent.b},0.2)`,
+            }}
+          >
+            <PlusIcon className="h-4 w-4" />
+            {t('dashboard.expired.topUp')}
+          </button>
         )}
       </div>
     </div>
