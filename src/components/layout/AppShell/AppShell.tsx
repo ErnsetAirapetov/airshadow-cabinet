@@ -12,7 +12,7 @@ import { useAuthStore } from '@/store/auth';
 import { useModeStore } from '@/store/mode';
 // Реестр простых страниц — один на приложение (#45), импорт разрешён поимённо в
 // scripts/check-mode-boundaries.mjs.
-import { resolveSimpleRoute } from '@/simple/routes';
+import { resolveSimpleRoute } from '@/simple';
 import { useHaptic } from '@/platform';
 import { useTelegramSDK } from '@/hooks/useTelegramSDK';
 import { useHeaderHeight } from '@/hooks/useHeaderHeight';
@@ -257,8 +257,10 @@ export function AppShell({ children }: AppShellProps) {
           <div className="flex shrink-0 items-center gap-2 justify-self-end">
             {/* Переключатель в простой режим виден в обоих режимах (#45): нет
                 простой версии пути — уводим на главную, иначе кнопка мёртвая.
-                Неймспейс подписи литералом (#46): импорт SIMPLE_NS апстримному
-                файлу запрещает гейт границ, а значения он не проверяет. */}
+                Неймспейс подписи литералом (#46) — сознательно, а не по запрету
+                гейта: файл в SEAMS, и импорт SIMPLE_NS гейт бы пропустил; литерал
+                держит шапку независимой от внутренностей простого режима
+                (docs/architecture/two-modes.md). */}
             <button
               onClick={() => {
                 haptic.impact('light');

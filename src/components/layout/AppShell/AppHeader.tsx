@@ -12,7 +12,7 @@ import { useAuthStore } from '@/store/auth';
 import { useModeStore } from '@/store/mode';
 // Реестр простых страниц — один на приложение (#45), импорт разрешён поимённо в
 // scripts/check-mode-boundaries.mjs.
-import { resolveSimpleRoute } from '@/simple/routes';
+import { resolveSimpleRoute } from '@/simple';
 import { displayName } from '@/utils/displayName';
 import { useShallow } from 'zustand/shallow';
 import { useTheme } from '@/hooks/useTheme';
@@ -415,8 +415,10 @@ export function AppHeader({
                 {/* Переключатель в простой режим — строкой меню, как в ящике
                     простого режима (#48), и виден в обоих режимах (#45): нет
                     простой версии пути — уводим на главную, иначе кнопка
-                    мёртвая. Неймспейс подписи литералом (#46): импорт SIMPLE_NS
-                    апстримному файлу запрещает гейт границ. */}
+                    мёртвая. Неймспейс подписи литералом (#46) — сознательно, а не
+                    по запрету гейта: файл в SEAMS, и импорт SIMPLE_NS гейт бы
+                    пропустил; литерал держит шапку независимой от внутренностей
+                    простого режима (docs/architecture/two-modes.md). */}
                 <button
                   type="button"
                   onClick={() => {
