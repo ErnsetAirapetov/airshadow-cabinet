@@ -11,5 +11,11 @@
     "errorTitle": "Не удалось загрузить подписку",
     "errorHint": "Похоже, пропала связь с сервером.",
     "retry": "Повторить"
+  },
+  "balance": {
+    "promocode": {
+      "expiredLabel": "Истекла",
+      "disabledLabel": "Отключена"
+    }
   }
 }

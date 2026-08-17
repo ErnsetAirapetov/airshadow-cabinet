@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import { useUiMode } from '@/store/mode';
+import { SimpleBalance } from './pages/Balance';
 import { SimpleDashboard } from './pages/Dashboard';
 import { matchSimpleRoute, type SimpleRoute } from './routeMatch';
 
@@ -40,6 +41,7 @@ export const simpleRoutes: SimpleRoute[] = [
   // Страницы добавляются задачами милстоуна [M1-E05], по одной за раз. Пути,
   // которых здесь нет, отдаются апстримными страницами.
   { path: '/', component: SimpleDashboard },
+  { path: '/balance', component: SimpleBalance },
 ];
 
 export function resolveSimpleRoute(pathname: string): SimpleRoute | null {
