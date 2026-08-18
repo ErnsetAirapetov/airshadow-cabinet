@@ -23,7 +23,6 @@ import {
   PauseIcon,
   CalendarIcon,
   RefreshIcon,
-  DevicesIcon,
   DownloadIcon,
   TrashIcon,
 } from '@/components/icons';
@@ -46,11 +45,13 @@ import {
 } from '@/utils/lavaRecurring';
 import {
   isCountdownUrgent,
-  resolveConnectButtonAccent,
+  resolveAdditionalOptions,
   resolveCountdownDisplay,
   resolveCountdownTickMs,
   resolveSubscriptionInfoRowLayout,
 } from './subscriptionState';
+import { ConnectDeviceButton } from '../components/subscription/ConnectDeviceButton';
+import { TariffChangeOption } from '../components/subscription/TariffChangeOption';
 import { DeviceTopupSheet } from '../components/subscription/sheets/DeviceTopupSheet';
 import { DeviceReductionSheet } from '../components/subscription/sheets/DeviceReductionSheet';
 import { TrafficTopupSheet } from '../components/subscription/sheets/TrafficTopupSheet';
@@ -362,6 +363,9 @@ export function SimpleSubscription() {
   });
 
   const isTariffsMode = purchaseOptions?.sales_mode === 'tariffs';
+  // Состав блока «Дополнительные опции» — чистая функция (#61). Условий в JSX
+  // нет: с ними «Сменить тариф» разъехалась бы с правилом из `purchaseCta`.
+  const additionalOptions = resolveAdditionalOptions(subscription ?? null, isTariffsMode);
 
   // SBP (Platega) recurring auto-payment status. Polls every 8s while a
   // payment is PENDING (waiting for bank-app confirmation) so the UI flips
@@ -769,9 +773,6 @@ export function SimpleSubscription() {
           const isUnlimited =
             (trafficData?.is_unlimited ?? false) || subscription.traffic_limit_gb === 0;
           const connectedDevices = devicesData?.total ?? 0;
-          const isAtDeviceLimit =
-            subscription.device_limit > 0 && connectedDevices >= subscription.device_limit;
-
           return (
             <div
               className="relative overflow-hidden rounded-3xl lg:backdrop-blur-xl"
@@ -1015,112 +1016,15 @@ export function SimpleSubscription() {
               </div>
 
               {/* ─── Connect Device Button ───
-                   Главное действие экрана. Акцент — инлайн-градиент и инлайн-тень
-                   литеральными цветами из `resolveConnectButtonAccent`, свечение В
-                   ПОКОЕ; обоснование приёма и почему не утилиты — в докстринге
-                   функции. Прежний `HoverBorderGradient` убран целиком: он светился
-                   только под курсором, которого нет ни на телефоне, ни в Telegram, а
-                   тон рамки брал из зоны расхода трафика — красил действие статусным
-                   цветом. Внутренности перекрашены в белое: они лежат на заливке. */}
-              {subscription.subscription_url &&
-                (() => {
-                  const connectAccent = resolveConnectButtonAccent(isAtDeviceLimit);
-
-                  return (
-                    <button
-                      type="button"
-                      disabled={isAtDeviceLimit}
-                      onClick={() => {
-                        if (isAtDeviceLimit) {
-                          haptic.notification('error');
-                          return;
-                        }
-                        navigate(
-                          subscriptionId ? `/connection?sub=${subscriptionId}` : '/connection',
-                        );
-                      }}
-                      className={`mb-3 flex w-full items-center gap-3.5 rounded-[14px] p-3.5 text-left transition-shadow duration-300 ${isAtDeviceLimit ? 'cursor-not-allowed opacity-50' : ''}`}
-                      style={{
-                        fontFamily: 'inherit',
-                        background: connectAccent.background,
-                        boxShadow: connectAccent.boxShadow,
-                      }}
-                    >
-                      <div
-                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] text-white"
-                        style={{ background: connectAccent.iconBackground }}
-                      >
-                        <DevicesIcon className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-semibold tracking-tight text-white">
-                          {t('dashboard.connectDevice')}
-                        </div>
-                        <div className="mt-0.5 text-[11px] text-white/70">
-                          {subscription.device_limit === 0
-                            ? t('dashboard.devicesConnectedUnlimited', { used: connectedDevices })
-                            : t('dashboard.devicesOfMax', {
-                                used: connectedDevices,
-                                max: subscription.device_limit,
-                              })}
-                        </div>
-                        {isAtDeviceLimit && (
-                          <div
-                            className="mt-1 text-[10px] font-medium"
-                            style={{ color: '#FFD166' }}
-                          >
-                            {t('dashboard.deviceLimitReached')}
-                          </div>
-                        )}
-                      </div>
-                      {subscription.device_limit === 0 ? (
-                        <div
-                          className="flex flex-shrink-0 items-center text-lg text-white/70"
-                          aria-hidden="true"
-                        >
-                          ∞
-                        </div>
-                      ) : subscription.device_limit <= 10 ? (
-                        <div className="flex flex-shrink-0 gap-1.5" aria-hidden="true">
-                          {Array.from({ length: subscription.device_limit }, (_, i) => (
-                            <div
-                              key={i}
-                              className="h-[7px] w-[7px] rounded-full transition-[background-color,box-shadow] duration-300"
-                              style={{
-                                background:
-                                  i < connectedDevices ? '#FFFFFF' : 'rgba(255,255,255,0.28)',
-                                boxShadow:
-                                  i < connectedDevices ? '0 0 6px rgba(255,255,255,0.55)' : 'none',
-                              }}
-                            />
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="flex w-16 flex-shrink-0 items-center" aria-hidden="true">
-                          <div
-                            className="h-[6px] w-full overflow-hidden rounded-full"
-                            style={{ background: 'rgba(255,255,255,0.24)' }}
-                          >
-                            {/* scaleX (compositor) instead of width (layout-thrash).
-                                Track is 64px (w-16), so 0.0625 floor = 4px minimum,
-                                preserving the prior minWidth behaviour. */}
-                            <div
-                              className="h-full w-full origin-left rounded-full transition-transform duration-500"
-                              style={{
-                                transform: `scaleX(${(() => {
-                                  const pct = connectedDevices / subscription.device_limit;
-                                  return connectedDevices > 0 ? Math.max(pct, 0.0625) : 0;
-                                })()})`,
-                                background: '#FFFFFF',
-                                boxShadow: '0 0 8px rgba(255,255,255,0.5)',
-                              }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </button>
-                  );
-                })()}
+                   Главное действие экрана. Общий компонент с карточкой на
+                   главной (#61): до него копий было две, и после #59 они
+                   разошлись — акцент достался только этой. Различия мест вызова
+                   пропами: здесь это внешний отступ, атрибута онбординга нет. */}
+              <ConnectDeviceButton
+                subscription={subscription}
+                connectedDevices={connectedDevices}
+                className="mb-3"
+              />
 
               {/* ─── Renewal CTA ───
                    Пара к кнопке подключения: сначала подключить, под ней продлить
@@ -1757,39 +1661,51 @@ export function SimpleSubscription() {
           простом режиме — это отдельная спека владельца, а не восстановление
           мультитарифной ветки. */}
 
-      {/* Additional Options (Buy Devices) */}
-      {subscription &&
-        (subscription.is_active || subscription.is_limited) &&
-        !subscription.is_trial &&
-        subscription.device_limit !== 0 && (
-          <div
-            className="relative overflow-hidden rounded-3xl"
-            style={{
-              background: g.cardBg,
-              border: `1px solid ${g.cardBorder}`,
-              boxShadow: g.shadow,
-              padding: '24px 28px',
-            }}
-          >
-            <h2 className="mb-4 text-base font-bold tracking-tight text-dark-50">
-              {t('subscription.additionalOptions.title')}
-            </h2>
+      {/* ─── Дополнительные опции ───
+           ⚠️ Условие блока переехало в `resolveAdditionalOptions` (#61). Прежнее
+           «...и ненулевой лимит устройств» стало ловушкой, когда сюда переехала
+           смена тарифа: `device_limit === 0` — это БЕЗЛИМИТ по устройствам, и
+           такому пользователю блок не показывали вовсе. Теперь лимит устройств
+           спрашивают сами устройство-зависимые пункты, а блок появляется, когда
+           в нём есть хоть один пункт. Видимость прежних пунктов при этом не
+           изменилась ни для кого — перебор состояний в
+           `tariffChangeAccess.test.ts`. */}
+      {subscription && additionalOptions.visible && (
+        <div
+          className="relative overflow-hidden rounded-3xl"
+          style={{
+            background: g.cardBg,
+            border: `1px solid ${g.cardBorder}`,
+            boxShadow: g.shadow,
+            padding: '24px 28px',
+          }}
+        >
+          <h2 className="mb-4 text-base font-bold tracking-tight text-dark-50">
+            {t('subscription.additionalOptions.title')}
+          </h2>
 
+          {/* ⚠️ Отступы между пунктами задаёт контейнер, а не сами пункты:
+                при `mt-4` на каждом кроме первого блок с единственным пунктом
+                (безлимит по устройствам) получил бы лишний отступ под
+                заголовком, а какой пункт окажется первым — теперь переменная. */}
+          <div className="space-y-4">
             {/* Buy Devices */}
-            <DeviceTopupSheet
-              open={showDeviceTopup}
-              onOpen={() => setShowDeviceTopup(true)}
-              onClose={() => setShowDeviceTopup(false)}
-              subscription={subscription}
-              subscriptionId={subscriptionId}
-              devicesToAdd={devicesToAdd}
-              onDevicesToAddChange={setDevicesToAdd}
-              purchaseOptions={purchaseOptions}
-              isDark={isDark}
-            />
+            {additionalOptions.deviceTopup && (
+              <DeviceTopupSheet
+                open={showDeviceTopup}
+                onOpen={() => setShowDeviceTopup(true)}
+                onClose={() => setShowDeviceTopup(false)}
+                subscription={subscription}
+                subscriptionId={subscriptionId}
+                devicesToAdd={devicesToAdd}
+                onDevicesToAddChange={setDevicesToAdd}
+                purchaseOptions={purchaseOptions}
+                isDark={isDark}
+              />
+            )}
 
             {/* Reduce Devices */}
-            <div className="mt-4">
+            {additionalOptions.deviceReduction && (
               <DeviceReductionSheet
                 open={showDeviceReduction}
                 onOpen={() => setShowDeviceReduction(true)}
@@ -1800,43 +1716,47 @@ export function SimpleSubscription() {
                 onTargetDeviceLimitChange={setTargetDeviceLimit}
                 isDark={isDark}
               />
-            </div>
+            )}
 
             {/* Buy Traffic */}
-            {subscription.traffic_limit_gb > 0 && (
-              <div className="mt-4">
-                <TrafficTopupSheet
-                  open={showTrafficTopup}
-                  onOpen={() => setShowTrafficTopup(true)}
-                  onClose={() => setShowTrafficTopup(false)}
-                  subscription={subscription}
-                  subscriptionId={subscriptionId}
-                  selectedTrafficPackage={selectedTrafficPackage}
-                  onSelectedTrafficPackageChange={setSelectedTrafficPackage}
-                  purchaseOptions={purchaseOptions}
-                  isDark={isDark}
-                />
-              </div>
+            {additionalOptions.trafficTopup && (
+              <TrafficTopupSheet
+                open={showTrafficTopup}
+                onOpen={() => setShowTrafficTopup(true)}
+                onClose={() => setShowTrafficTopup(false)}
+                subscription={subscription}
+                subscriptionId={subscriptionId}
+                selectedTrafficPackage={selectedTrafficPackage}
+                onSelectedTrafficPackageChange={setSelectedTrafficPackage}
+                purchaseOptions={purchaseOptions}
+                isDark={isDark}
+              />
             )}
 
             {/* Server Management - only in classic mode */}
-            {!isTariffsMode && (
-              <div className="mt-4">
-                <ServerManagementSheet
-                  open={showServerManagement}
-                  onOpen={() => setShowServerManagement(true)}
-                  onClose={() => setShowServerManagement(false)}
-                  subscription={subscription}
-                  subscriptionId={subscriptionId}
-                  selectedServers={selectedServersToUpdate}
-                  onSelectedServersChange={setSelectedServersToUpdate}
-                  purchaseOptions={purchaseOptions}
-                  isDark={isDark}
-                />
-              </div>
+            {additionalOptions.serverManagement && (
+              <ServerManagementSheet
+                open={showServerManagement}
+                onOpen={() => setShowServerManagement(true)}
+                onClose={() => setShowServerManagement(false)}
+                subscription={subscription}
+                subscriptionId={subscriptionId}
+                selectedServers={selectedServersToUpdate}
+                onSelectedServersChange={setSelectedServersToUpdate}
+                purchaseOptions={purchaseOptions}
+                isDark={isDark}
+              />
+            )}
+
+            {/* ⚠️ Сменить тариф — переехала сюда из второстепенной кнопки под
+                  продлением (#61). Не шторка: ведёт на витрину тарифов, адрес
+                  приходит готовым из `purchaseCta`. */}
+            {additionalOptions.tariffChange && (
+              <TariffChangeOption action={additionalOptions.tariffChange} isDark={isDark} />
             )}
           </div>
-        )}
+        </div>
+      )}
 
       {/* Reissue Subscription — standalone block, not dependent on device_limit */}
       {subscription &&

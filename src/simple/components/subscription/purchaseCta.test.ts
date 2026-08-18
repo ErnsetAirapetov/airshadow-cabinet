@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveSubscriptionCta } from './purchaseCta';
+import { resolveSubscriptionCta, resolveTariffChangeOption } from './purchaseCta';
 import type { Subscription } from '@/types';
 
 /**
@@ -38,31 +38,36 @@ function sub(overrides: Partial<Subscription> = {}): Subscription {
 }
 
 describe('resolveSubscriptionCta', () => {
-  it('активная платная подписка — две кнопки: продление и смена тарифа', () => {
+  it('активная платная подписка — одна кнопка продления', () => {
+    // ⚠️ Смена тарифа отсюда УЕХАЛА в блок «Дополнительные опции» (#61):
+    // владелец забраковал её вид второстепенной кнопкой. Пропасть она при этом
+    // не должна — парная проверка ниже, через `resolveTariffChangeOption`.
     const actions = resolveSubscriptionCta(sub());
 
-    expect(actions.map((a) => a.kind)).toEqual(['renew', 'change']);
-
-    const [renew, change] = actions;
-    expect(renew).toMatchObject({
+    expect(actions.map((a) => a.kind)).toEqual(['renew']);
+    expect(actions[0]).toMatchObject({
       to: '/subscriptions/7/renew',
       tone: 'accent',
       labelKey: 'subscription.extend',
       hintKey: 'subscription.cta.renewHint',
     });
-    expect(change).toMatchObject({
+  });
+
+  it('у активной платной смена тарифа приходит пунктом блока, а не пропадает', () => {
+    expect(resolveTariffChangeOption(sub())).toMatchObject({
+      kind: 'change',
       to: '/subscription/purchase',
-      tone: 'subtle',
       labelKey: 'subscription.switchTariff.title',
       hintKey: 'subscription.cta.changeHint',
     });
   });
 
-  it('limited-подписка ведёт себя как активная — обе кнопки на месте', () => {
-    const actions = resolveSubscriptionCta(sub({ is_active: false, is_limited: true }));
+  it('limited-подписка ведёт себя как активная', () => {
+    const limited = sub({ is_active: false, is_limited: true });
 
-    expect(actions.map((a) => a.kind)).toEqual(['renew', 'change']);
-    expect(actions[0]?.to).toBe('/subscriptions/7/renew');
+    expect(resolveSubscriptionCta(limited).map((a) => a.kind)).toEqual(['renew']);
+    expect(resolveSubscriptionCta(limited)[0]?.to).toBe('/subscriptions/7/renew');
+    expect(resolveTariffChangeOption(limited)?.kind).toBe('change');
   });
 
   it('триал — одна кнопка в витрину: продлевать нечего', () => {
@@ -120,5 +125,51 @@ describe('resolveSubscriptionCta', () => {
     const actions = resolveSubscriptionCta(sub({ id: 0 }));
 
     expect(actions.map((a) => a.kind)).toEqual(['change']);
+  });
+});
+
+/**
+ * Пункт «Сменить тариф» в блоке «Дополнительные опции» (задача #61).
+ *
+ * ⚠️ Правило ОДНО и живёт здесь же: `resolveTariffChangeOption` и
+ * `resolveSubscriptionCta` считают один и тот же набор действий и делят его.
+ * Второе правило «когда показывать пункт» разъехалось бы с первым молча — это
+ * ровно та ошибка, из-за которой разошлись две копии кнопки подключения.
+ */
+describe('resolveTariffChangeOption', () => {
+  it('переезжает только то, что было ВТОРОСТЕПЕННЫМ действием', () => {
+    // У активной платной смена тарифа стояла второй кнопкой под продлением —
+    // её и просили перенести.
+    expect(resolveTariffChangeOption(sub())).not.toBeNull();
+  });
+
+  it('суточный тариф — смена остаётся кнопкой, пункта блока нет', () => {
+    // ⚠️ Единственное действие экрана второстепенным не бывает: у суточной
+    // подписки продления нет вовсе, и смена тарифа — единственный способ
+    // что-то сделать. Переезд задвоил бы её (кнопка + пункт).
+    const daily = sub({ is_daily: true });
+
+    expect(resolveSubscriptionCta(daily).map((a) => a.kind)).toEqual(['change']);
+    expect(resolveTariffChangeOption(daily)).toBeNull();
+  });
+
+  it('подписка без id — смена тоже остаётся кнопкой', () => {
+    const noId = sub({ id: 0 });
+
+    expect(resolveSubscriptionCta(noId).map((a) => a.kind)).toEqual(['change']);
+    expect(resolveTariffChangeOption(noId)).toBeNull();
+  });
+
+  it('триал, истёкшая и отсутствующая подписка пункта не получают', () => {
+    // Смены тарифа у них нет и в кнопках: там оформление с нуля.
+    expect(resolveTariffChangeOption(sub({ is_trial: true }))).toBeNull();
+    expect(resolveTariffChangeOption(sub({ is_active: false, is_expired: true }))).toBeNull();
+    expect(resolveTariffChangeOption(null)).toBeNull();
+  });
+
+  it('адрес пункта — тот же, что у прежней кнопки', () => {
+    // Спека: вести должна туда же, куда ведёт сейчас, и адрес брать из
+    // существующего правила, а не писать второй раз.
+    expect(resolveTariffChangeOption(sub())?.to).toBe('/subscription/purchase');
   });
 });
