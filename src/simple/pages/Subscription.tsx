@@ -2,7 +2,7 @@ import { uiLocale } from '@/utils/uiLocale';
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
-import { Navigate, useNavigate, useParams } from 'react-router';
+import { useNavigate, useParams } from 'react-router';
 import { subscriptionApi } from '@/api/subscription';
 import { DEVICE_ALIAS_MAX_LENGTH } from '@/constants/devices';
 import { WebBackButton } from '../components/WebBackButton';
@@ -55,7 +55,6 @@ import { DeviceTopupSheet } from '../components/subscription/sheets/DeviceTopupS
 import { DeviceReductionSheet } from '../components/subscription/sheets/DeviceReductionSheet';
 import { TrafficTopupSheet } from '../components/subscription/sheets/TrafficTopupSheet';
 import { ServerManagementSheet } from '../components/subscription/sheets/ServerManagementSheet';
-import { DeleteSubscriptionSheet } from '../components/subscription/sheets/DeleteSubscriptionSheet';
 
 /**
  * Изолированный счётчик — тик не перерисовывает страницу целиком.
@@ -267,7 +266,6 @@ export function SimpleSubscription() {
   const { openLink, platform } = usePlatform();
   const { showToast } = useToast();
   const [copied, setCopied] = useState(false);
-  const [showDeleteSheet, setShowDeleteSheet] = useState(false);
   const destructiveConfirm = useDestructiveConfirm();
 
   // Helper to format price from kopeks
@@ -297,14 +295,17 @@ export function SimpleSubscription() {
     is_unlimited: boolean;
   } | null>(null);
 
-  // Detect multi-tariff mode from cached subscriptions-list
-  const { data: multiSubData } = useQuery({
-    queryKey: ['subscriptions-list'],
-    queryFn: () => subscriptionApi.getSubscriptions(),
-    staleTime: 60_000,
-  });
-  const isMultiTariff = multiSubData?.multi_tariff_enabled ?? false;
-
+  // ⚠️ Запроса `subscriptions-list` здесь БОЛЬШЕ НЕТ, и возвращать его не надо
+  // (задача #60). Он определял мультитариф, а от мультитарифных ветвлений
+  // простой режим отказался целиком: «одна подписка — одна карточка», данные
+  // берём из `/cabinet/subscription`, а не из списка (канон, «Состав простого
+  // режима»). С этой страницей на адресе `/subscriptions` список стал ещё и
+  // лишним запросом на первом экране пункта меню «Подписка».
+  //
+  // Что ушло вместе с ним: редирект «мультитариф без идентификатора → список»
+  // (он стал бы петлёй на самого себя), тариф в заголовке вместо названия
+  // страницы, возврат назад в список и удаление истёкшей подписки. Все четыре
+  // ветки при одном тарифе и так никогда не срабатывали.
   const { data: subscriptionResponse, isLoading } = useQuery({
     queryKey: ['subscription', subscriptionId],
     queryFn: () => subscriptionApi.getSubscription(subscriptionId),
@@ -713,11 +714,11 @@ export function SimpleSubscription() {
     revokeMutation.mutate();
   };
 
-  // In multi-tariff mode without a specific subscription ID, redirect to list
-  if (isMultiTariff && !subscriptionId && !isLoading) {
-    return <Navigate to="/subscriptions" replace />;
-  }
-
+  // ⚠️ Редиректа «нет идентификатора → уйти на /subscriptions» здесь БОЛЬШЕ НЕТ,
+  // и заводить его заново нельзя (задача #60): страница зарегистрирована на этом
+  // самом адресе, так что шов вернул бы её же — и так до бесконечности. Без
+  // идентификатора показываем текущую подписку: `getSubscription(undefined)`
+  // отдаёт её. Сторож петли — в `src/simple/routes.test.tsx`.
   if (isLoading) {
     return (
       <div className="flex min-h-64 items-center justify-center">
@@ -736,6 +737,10 @@ export function SimpleSubscription() {
         <p className="mb-4 text-sm text-dark-50/60">
           {t('subscription.notFoundDesc', 'Возможно, подписка была удалена или не существует')}
         </p>
+        {/* ⚠️ Петли здесь нет, хотя адрес тот же (проверено по задаче #60): эта
+            ветка требует идентификатор в адресе, а `/subscriptions` рисует ту же
+            страницу БЕЗ него — то есть текущую подписку, и «не найдена» второй раз
+            не возникает. */}
         <button
           onClick={() => navigate('/subscriptions')}
           className="rounded-xl bg-accent-500 px-6 py-2.5 text-sm font-medium text-on-accent"
@@ -750,12 +755,11 @@ export function SimpleSubscription() {
     <div className="space-y-6">
       {/* Page title */}
       <div className="flex items-center gap-3">
-        <WebBackButton to={isMultiTariff ? '/subscriptions' : '/'} />
-        <h1 className="text-2xl font-bold text-dark-50 sm:text-3xl">
-          {isMultiTariff && subscription?.tariff_name
-            ? subscription.tariff_name
-            : t('subscription.title')}
-        </h1>
+        {/* ⚠️ Назад — всегда на главную. Мультитарифная ветка «назад в список»
+            вела бы на `/subscriptions`, где теперь стоит эта же страница: кнопка
+            возврата с неё же на неё (задача #60). */}
+        <WebBackButton to="/" />
+        <h1 className="text-2xl font-bold text-dark-50 sm:text-3xl">{t('subscription.title')}</h1>
       </div>
 
       {/* Current Subscription */}
@@ -1746,26 +1750,12 @@ export function SimpleSubscription() {
           и лишать экран без подписки единственной кнопки он не должен. */}
       {!subscription && <PurchaseCTAButton subscription={null} />}
 
-      {/* Delete expired subscription */}
-      {isMultiTariff &&
-        subscription &&
-        !subscription.is_active &&
-        !subscription.is_trial &&
-        !subscription.is_limited && (
-          <div className="space-y-3">
-            <DeleteSubscriptionSheet
-              subscriptionId={subscription.id}
-              open={showDeleteSheet}
-              onOpen={() => setShowDeleteSheet(true)}
-              onClose={() => setShowDeleteSheet(false)}
-              textSecondary={g.textSecondary}
-              onDeleted={() => {
-                queryClient.invalidateQueries({ queryKey: ['subscriptions-list'] });
-                navigate('/subscriptions', { replace: true });
-              }}
-            />
-          </div>
-        )}
+      {/* ⚠️ Удаление истёкшей подписки убрано вместе с мультитарифом (#60), а не
+          потеряно при правке. Блок целиком стоял под `isMultiTariff`, то есть при
+          одном тарифе не рисовался никогда, а его `onDeleted` уводил на
+          `/subscriptions` — адрес этой же страницы. Понадобится удаление в
+          простом режиме — это отдельная спека владельца, а не восстановление
+          мультитарифной ветки. */}
 
       {/* Additional Options (Buy Devices) */}
       {subscription &&

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { matchSimpleRoute, type SimpleRoute, UPSTREAM_LITERAL_PATHS } from './routeMatch';
 
@@ -68,7 +68,7 @@ describe('matchSimpleRoute', () => {
 });
 
 describe('состав реестра', () => {
-  it('боевой реестр подменяет главную, баланс, пополнение, покупку, продление и карточку подписки', () => {
+  it('боевой реестр подменяет главную, баланс, пополнение, покупку, продление и подписку', () => {
     // Сторож состава. Раньше здесь стояло ожидание пустого реестра — каркас не
     // подменял ничего; первая простая страница (задача #27) его уронила, как и
     // было задумано. Дальше список растёт задачами милстоуна [M1-E05], и каждая
@@ -79,6 +79,7 @@ describe('состав реестра', () => {
       '/balance/top-up',
       '/balance/top-up/:methodId',
       '/subscription/purchase',
+      '/subscriptions',
       '/subscriptions/:subscriptionId',
       '/subscriptions/:subscriptionId/renew',
     ]);
@@ -198,6 +199,20 @@ describe('литеральный маршрут апстрима важнее п
     expect(matchSimpleRoute(liveRoutes, '/subscriptions/42/renew/confirm')).toBeNull();
   });
 
+  it('адрес подписки, карточка и продление достаются каждый своей записи (задача #60)', () => {
+    // ⚠️ Зонд по БОЕВОМУ реестру. Литерал `/subscriptions` заведён рядом с двумя
+    // записями-параметрами — ровно та конфигурация, на которой в #53 запись с
+    // параметром накрыла литерального соседа при полностью зелёных тестах.
+    // Поэтому проверяются все три адреса, а не только новый.
+    expect(matchSimpleRoute(liveRoutes, '/subscriptions')?.path).toBe('/subscriptions');
+    expect(matchSimpleRoute(liveRoutes, '/subscriptions/42')?.path).toBe(
+      '/subscriptions/:subscriptionId',
+    );
+    expect(matchSimpleRoute(liveRoutes, '/subscriptions/42/renew')?.path).toBe(
+      '/subscriptions/:subscriptionId/renew',
+    );
+  });
+
   it('ни один статический маршрут под швом не отдан чужой записи реестра', () => {
     const hijacked = staticProtectedPaths
       .map((path) => ({ path, override: matchSimpleRoute(liveRoutes, path)?.path ?? null }))
@@ -261,5 +276,228 @@ describe('литеральный маршрут апстрима важнее п
     ];
 
     expect(matchSimpleRoute(paramFirst, '/subscriptions/new')?.path).toBe('/subscriptions/new');
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Петля «страница уводит на собственный адрес» (задача #60).
+ *
+ * Пока `/subscriptions` рисовался апстримным списком, ветка простой страницы
+ * подписки «мультитариф без идентификатора → уйти на /subscriptions» была
+ * безобидной. С записью реестра на этом же адресе она превращается в
+ * бесконечный редирект страницы на саму себя: шов подставляет ту же страницу,
+ * та снова редиректит.
+ *
+ * Сторож сделан общим, а не точечным на эту страницу: пара «литеральный путь в
+ * реестре + самоувод из зарегистрированной на нём страницы» повторится у любой
+ * следующей простой страницы, а стоит она белого экрана.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/** Записи реестра целиком — путь и имя компонента; реестр читается текстом. */
+const registryEntries = [
+  ...routesSource.matchAll(/^\s*\{\s*path:\s*'([^']+)',\s*component:\s*(\w+)\s*\}/gm),
+].map((match) => ({ path: match[1], component: match[2] }));
+
+/** Импорты реестра: имя компонента → файл его исходника. */
+const componentSources = new Map(
+  [...routesSource.matchAll(/import\s*\{\s*(\w+)\s*\}\s*from\s*'\.\/([^']+)'/g)].map((match) => [
+    match[1],
+    `src/simple/${match[2]}.tsx`,
+  ]),
+);
+
+/** Комментарии вырезаны: докстринги сами упоминают и адреса, и петли. */
+function stripComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
+/**
+ * Содержимое строковых литералов заменено заглушкой той же длины.
+ *
+ * Нужно для разбора вложенности: скобка внутри строки не должна за неё
+ * считаться. Длина не меняется, поэтому индексы маскированной копии и исходного
+ * текста совпадают — искать можно по одной, а решать по другой.
+ */
+function maskStrings(source: string): string {
+  return source.replace(
+    /'[^'\n]*'|"[^"\n]*"|`[^`]*`/g,
+    (found) => found[0] + 'x'.repeat(found.length - 2) + found[found.length - 1],
+  );
+}
+
+/**
+ * Чем открыт уровень вложенности, чтобы считать его обработчиком действия
+ * пользователя. Обе формы — это уже принятое правило «переход из `onClick`
+ * разрешён»: проп или поле-колбэк (`onClick={`, `onSuccess:`) и именованная
+ * функция обработчика (`const handleRenew = `, `function onDeleted(`).
+ */
+const HANDLER_OPENERS = [
+  /\bon[A-Z]\w*\s*[:=][^;{}]*$/,
+  /\b(?:const|let|var|function)\s+(?:handle|on)[A-Z]\w*[^;{}]*$/,
+];
+
+/** Текст перед позицией опознаётся как открытие обработчика. */
+function opensHandler(masked: string, cursor: number): boolean {
+  const tail = masked.slice(Math.max(0, cursor - 200), cursor);
+
+  return HANDLER_OPENERS.some((opener) => opener.test(tail));
+}
+
+/**
+ * Идёт ли вызов навигации из обработчика.
+ *
+ * Разбор поднимается наружу по НЕЗАКРЫТЫМ скобкам и смотрит, чем открыт каждый
+ * уровень; нулевым уровнем проверяется сам оператор — короткая стрелка
+ * `const handleGo = () => navigate(…)` фигурных скобок не открывает вовсе.
+ *
+ * ⚠️ Правило ФЕЙЛ-КЛОУЗД: всё, что не опознано обработчиком, считается
+ * самоуводом. Перечислять «места, откуда нельзя» — тупик, на котором сторож уже
+ * один раз оказался: пока он искал маркер `useEffect(`, та же самая петля,
+ * записанная через `useLayoutEffect` или голым вызовом в теле рендера, держала
+ * `npm test` зелёным.
+ */
+function insideHandler(masked: string, index: number): boolean {
+  if (opensHandler(masked, index)) {
+    return true;
+  }
+
+  let round = 0;
+  let curly = 0;
+
+  for (let cursor = index; cursor >= 0; cursor -= 1) {
+    const char = masked[cursor];
+
+    if (char === ')') {
+      round += 1;
+    } else if (char === '}') {
+      curly += 1;
+    } else if (char === '(' && round > 0) {
+      round -= 1;
+    } else if (char === '{' && curly > 0) {
+      curly -= 1;
+    } else if ((char === '(' || char === '{') && opensHandler(masked, cursor)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Адреса, на которые исходник уводит САМ, без действия пользователя.
+ *
+ * Два источника: `<Navigate to="…" />` — редирект по определению — и вызов
+ * `navigate('…')` откуда угодно, КРОМЕ обработчика. Тело рендера, `useEffect`,
+ * `useLayoutEffect`, `useInsertionEffect` разбор не различает и различать не
+ * должен: петля во всех четырёх одинакова.
+ *
+ * ⚠️ Известное ограничение — разбор текстовый и видит только литеральный адрес
+ * в самом файле страницы. Переход через переменную (`navigate(target)`), через
+ * `<Navigate to={expr} />` или из чужого модуля ему не виден. Ровно так же это
+ * записано в каноне: обещать больше, чем сторож держит, нельзя.
+ */
+function selfNavigationTargets(source: string): string[] {
+  const code = stripComments(source);
+  const masked = maskStrings(code);
+  const targets: string[] = [];
+
+  for (const found of code.matchAll(/<Navigate[^>]*\bto=\{?['"]([^'"]+)['"]/g)) {
+    targets.push(found[1]);
+  }
+
+  for (const found of code.matchAll(/\bnavigate\(\s*['"]([^'"]+)['"]/g)) {
+    if (!insideHandler(masked, found.index)) {
+      targets.push(found[1]);
+    }
+  }
+
+  return targets;
+}
+
+describe('простая страница не уводит на собственный адрес', () => {
+  /**
+   * Фикстура-мутация для разбора: в ней собраны все формы сразу — четыре
+   * самоувода, два законных перехода из обработчика и ловушка на маскирование
+   * строк. Без неё сломанный разбор дал бы вечно зелёного сторожа.
+   */
+  const fixture = [
+    'function Page() {',
+    '  useEffect(() => {',
+    "    log(':)');",
+    "    navigate('/loop-effect', { replace: true });",
+    '  }, []);',
+    '  useLayoutEffect(() => {',
+    "    navigate('/loop-layout');",
+    '  }, []);',
+    "  if (bare) navigate('/loop-body');",
+    "  log('onClick={');",
+    "  navigate('/loop-string-trap');",
+    "  const handleGo = () => navigate('/not-a-loop-named');",
+    '  if (bad) return <Navigate to="/loop-render" replace />;',
+    "  return <button onClick={() => { navigate('/not-a-loop-click'); }} />;",
+    '}',
+  ].join('\n');
+
+  const fixtureTargets = selfNavigationTargets(fixture);
+
+  it('разбор ловит редирект отрисовки и все три формы вызова вне обработчика', () => {
+    // `useLayoutEffect` и голый вызов в теле рендера — ровно те две формы, на
+    // которых прежний разбор по маркеру `useEffect(` молчал при живой петле.
+    expect(fixtureTargets).toContain('/loop-render');
+    expect(fixtureTargets).toContain('/loop-effect');
+    expect(fixtureTargets).toContain('/loop-layout');
+    expect(fixtureTargets).toContain('/loop-body');
+  });
+
+  it('разбор не трогает переходы из обработчика — иначе сторож запрещал бы законное', () => {
+    // Обе принятые формы: проп-обработчик и именованная функция обработчика,
+    // записанная короткой стрелкой без фигурных скобок.
+    expect(fixtureTargets).not.toContain('/not-a-loop-click');
+    expect(fixtureTargets).not.toContain('/not-a-loop-named');
+  });
+
+  it('строковый литерал не выдаёт себя за открытие обработчика', () => {
+    // Ловушка на маскирование: `log('onClick={')` — это строка, а не обработчик.
+    // Без маскирования разбор принял бы её за него и пропустил бы петлю.
+    expect(fixtureTargets).toContain('/loop-string-trap');
+  });
+
+  it('реестр разобран вместе с компонентами и их файлами', () => {
+    // Пара «разбор удался» для сторожа ниже: он читает исходники страниц по
+    // именам компонентов, и незамеченная запись означала бы непроверенную
+    // страницу при зелёном тесте.
+    expect(registryEntries).toHaveLength(registeredPaths.length);
+    expect(registryEntries.filter(({ component }) => !componentSources.has(component))).toEqual([]);
+
+    const missing = registryEntries.filter(
+      ({ component }) => !existsSync(componentSources.get(component) ?? ''),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it('страница подписки зарегистрирована на литеральном /subscriptions (задача #60)', () => {
+    // Предпосылка сторожа: без литеральной записи проверять было бы нечего, и
+    // он проходил бы, ничего не охраняя.
+    expect(registryEntries).toContainEqual({
+      path: '/subscriptions',
+      component: 'SimpleSubscription',
+    });
+  });
+
+  it('ни одна страница не уводит сама на путь, на котором зарегистрирована', () => {
+    const loops = registryEntries
+      .filter(({ path }) => !path.includes(':'))
+      .flatMap(({ path, component }) => {
+        const file = componentSources.get(component) ?? '';
+        const source = existsSync(file) ? readFileSync(file, 'utf8') : '';
+
+        return selfNavigationTargets(source)
+          .filter((target) => target === path)
+          .map((target) => ({ page: component, target }));
+      });
+
+    // Пусто — значит подмена не отправляет пользователя туда, откуда шов вернёт
+    // ему ту же страницу, и так до бесконечности.
+    expect(loops).toEqual([]);
   });
 });
