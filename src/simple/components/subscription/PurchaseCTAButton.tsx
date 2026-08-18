@@ -14,6 +14,15 @@ interface PurchaseCTAButtonProps {
  * `resolveSubscriptionCta` (там же матрица состояний и тесты); здесь только
  * рендер: акцентное действие — карточкой с градиентной рамкой, второстепенное —
  * плоской строкой.
+ *
+ * ⚠️ Это НАША копия: экспертная страница (`src/pages/Subscription.tsx`) берёт
+ * свой компонент из `src/components/**`, так что правки отсюда в экспертный
+ * режим не протекают. Зовётся только с `src/simple/pages/Subscription.tsx`.
+ *
+ * ⚠️ Вес подложки поднят в #62 вместе с приглушением кнопки подключения — пара
+ * действий обязана читаться как пара. Пороги и иерархию сторожит
+ * `purchaseCtaButton.test.ts`, там же записано, почему сравнение идёт с живой
+ * выдачей `resolveConnectButtonAccent`, а не с числом.
  */
 export default function PurchaseCTAButton({ subscription }: PurchaseCTAButtonProps) {
   const actions = resolveSubscriptionCta(subscription);
@@ -50,9 +59,21 @@ function PrimaryAction({ action }: { action: SubscriptionCtaAction }) {
         <div
           className="relative flex items-center justify-between rounded-[14px] px-5 py-4 transition-colors duration-300"
           style={{
+            // ⚠️ Плотность подложки поднята с 0.08/0.06 в #62. На восьми
+            // процентах кнопка была почти невидима на фоне карточки; пока
+            // подключение светилось ореолом, разницу списывали на иерархию, а
+            // после его приглушения пара обязана читаться осмысленно.
+            // Полупрозрачной подложка при этом остаётся: подключение — сплошная
+            // заливка, и главное действие страницы догонять нельзя.
+            //
+            // Литерал `255,59,92` заодно заменён на `--color-critical-500` — это
+            // ровно его значение (`globals.css:218`). Второй конец градиента
+            // остался литералом: переменной под этот оранжевый в палитре нет, а
+            // заводить её значило бы править общий с экспертным режимом
+            // `globals.css`.
             background: isCritical
-              ? 'linear-gradient(135deg, rgba(255,59,92,0.08), rgba(255,107,53,0.06))'
-              : 'linear-gradient(135deg, rgba(var(--color-accent-400), 0.08), rgba(var(--color-accent-400), 0.06))',
+              ? 'linear-gradient(135deg, rgba(var(--color-critical-500), 0.16), rgba(255,107,53,0.12))'
+              : 'linear-gradient(135deg, rgba(var(--color-accent-400), 0.16), rgba(var(--color-accent-400), 0.12))',
           }}
         >
           {/* Left: icon + text */}
@@ -62,8 +83,8 @@ function PrimaryAction({ action }: { action: SubscriptionCtaAction }) {
               className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-xl"
               style={{
                 background: isCritical
-                  ? 'rgba(255,59,92,0.12)'
-                  : 'rgba(var(--color-accent-400), 0.12)',
+                  ? 'rgba(var(--color-critical-500), 0.22)'
+                  : 'rgba(var(--color-accent-400), 0.22)',
                 color: accentColor,
               }}
             >
