@@ -8,7 +8,6 @@ import { DEVICE_ALIAS_MAX_LENGTH } from '@/constants/devices';
 import { WebBackButton } from '../components/WebBackButton';
 import { useDestructiveConfirm } from '@/platform/hooks/useNativeDialog';
 import TrafficProgressBar from '../components/dashboard/TrafficProgressBar';
-import { HoverBorderGradient } from '@/components/ui/hover-border-gradient';
 import { useTrafficZone } from '@/hooks/useTrafficZone';
 import { formatTraffic } from '@/utils/formatTraffic';
 import { getGlassColors } from '@/utils/glassTheme';
@@ -30,11 +29,7 @@ import {
 } from '@/components/icons';
 import { useHaptic, usePlatform } from '@/platform';
 import { resolveConnectionUrlForUi } from '@/utils/connectionLink';
-import {
-  getErrorMessage,
-  getInsufficientBalanceError,
-  getFlagEmoji,
-} from '@/utils/subscriptionHelpers';
+import { getErrorMessage, getInsufficientBalanceError } from '@/utils/subscriptionHelpers';
 import { openPaymentUrl } from '@/utils/openPaymentUrl';
 import { useToast } from '@/components/Toast';
 import {
@@ -49,44 +44,65 @@ import {
   lavaUiState,
   type LavaUiState,
 } from '@/utils/lavaRecurring';
-import Twemoji from 'react-twemoji';
+import {
+  isCountdownUrgent,
+  resolveConnectButtonAccent,
+  resolveCountdownDisplay,
+  resolveCountdownTickMs,
+  resolveSubscriptionInfoRowLayout,
+} from './subscriptionState';
 import { DeviceTopupSheet } from '../components/subscription/sheets/DeviceTopupSheet';
 import { DeviceReductionSheet } from '../components/subscription/sheets/DeviceReductionSheet';
 import { TrafficTopupSheet } from '../components/subscription/sheets/TrafficTopupSheet';
 import { ServerManagementSheet } from '../components/subscription/sheets/ServerManagementSheet';
 import { DeleteSubscriptionSheet } from '../components/subscription/sheets/DeleteSubscriptionSheet';
 
-/** Isolated countdown so 1s interval doesn't re-render the whole page */
+/**
+ * Изолированный счётчик — тик не перерисовывает страницу целиком.
+ *
+ * ⚠️ Единицы и период тика решает `subscriptionState`, здесь только разметка
+ * (задача #59). Правило владельца: остаток НЕ МЕНЬШЕ суток — печатаем ТОЛЬКО дни
+ * (ровно 24 часа — это уже «1 дн.»), и посекундного тика в этом состоянии нет
+ * вовсе. Формулировка «больше суток» здесь неверна и границу сдвигает: сама
+ * граница живёт в `resolveCountdownDisplay`, а описание рядом с ней — прямое
+ * приглашение «починить» правильный код.
+ */
 const CountdownTimer = memo(function CountdownTimer({
   endDate,
   isActive,
   glassColors: g,
+  className,
 }: {
   endDate: string;
   isActive: boolean;
   glassColors: ReturnType<typeof getGlassColors>;
+  className?: string;
 }) {
   const { t } = useTranslation();
-  const [countdown, setCountdown] = useState({ days: 0, hours: 0, minutes: 0, seconds: 0 });
+  const [remainingMs, setRemainingMs] = useState(() =>
+    Math.max(0, new Date(endDate).getTime() - Date.now()),
+  );
+
+  const tickMs = resolveCountdownTickMs({ remainingMs, isActive });
 
   useEffect(() => {
     const endTime = new Date(endDate).getTime();
-    const tick = () => {
-      const diff = Math.max(0, endTime - Date.now());
-      setCountdown({
-        days: Math.floor(diff / 86_400_000),
-        hours: Math.floor((diff % 86_400_000) / 3_600_000),
-        minutes: Math.floor((diff % 3_600_000) / 60_000),
-        seconds: Math.floor((diff % 60_000) / 1_000),
-      });
-    };
-    tick();
-    const id = setInterval(tick, 1000);
-    return () => clearInterval(id);
-  }, [endDate]);
+    const read = () => Math.max(0, endTime - Date.now());
 
-  const isExpired = !isActive;
-  const isUrgent = countdown.days <= 3;
+    setRemainingMs(read());
+    if (tickMs === null) return;
+
+    // ⚠️ `tickMs` в зависимостях не случаен: пока остаток не меньше суток, период
+    // минутный, а при переходе на последние сутки эффект перезапускается уже с
+    // секундным. Без него открытая с вечера страница так и тикала бы раз в
+    // минуту на финальных часах.
+    const id = setInterval(() => setRemainingMs(read()), tickMs);
+    return () => clearInterval(id);
+  }, [endDate, tickMs]);
+
+  const display = resolveCountdownDisplay({ remainingMs, isActive });
+  const isExpired = display.kind === 'expired';
+  const isUrgent = isCountdownUrgent(remainingMs);
 
   const formattedDate = new Date(endDate).toLocaleDateString(uiLocale(), {
     day: 'numeric',
@@ -96,7 +112,7 @@ const CountdownTimer = memo(function CountdownTimer({
 
   return (
     <div
-      className="min-w-0 overflow-hidden rounded-[14px] p-3.5"
+      className={`h-full min-w-0 overflow-hidden rounded-[14px] p-3.5 ${className ?? ''}`}
       style={{
         background: isExpired
           ? 'rgba(255,59,92,0.06)'
@@ -143,51 +159,54 @@ const CountdownTimer = memo(function CountdownTimer({
           {t('subscription.expired')}
         </div>
       ) : (
-        <div className="flex items-baseline justify-between">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
           <div className="flex items-baseline gap-1 font-mono tabular-nums">
-            {countdown.days > 0 && (
+            {display.kind === 'days' ? (
               <>
                 <span
                   className="text-[20px] font-bold tracking-tight"
                   style={{ color: isUrgent ? 'rgb(var(--color-urgent-400))' : g.text }}
                 >
-                  {countdown.days}
+                  {display.days}
                 </span>
-                <span className="mr-1 text-[10px] font-medium text-dark-50/25">
+                <span className="text-[10px] font-medium text-dark-50/25">
                   {t('subscription.daysShort')}
                 </span>
               </>
+            ) : (
+              <>
+                <span
+                  className="text-[20px] font-bold tracking-tight"
+                  style={{ color: isUrgent ? 'rgb(var(--color-urgent-400))' : g.text }}
+                >
+                  {String(display.hours).padStart(2, '0')}
+                </span>
+                <span
+                  className="mx-[-1px] text-[16px] font-bold opacity-30"
+                  style={{ color: isUrgent ? 'rgb(var(--color-urgent-400))' : g.text }}
+                >
+                  :
+                </span>
+                <span
+                  className="text-[20px] font-bold tracking-tight"
+                  style={{ color: isUrgent ? 'rgb(var(--color-urgent-400))' : g.text }}
+                >
+                  {String(display.minutes).padStart(2, '0')}
+                </span>
+                <span
+                  className="mx-[-1px] text-[16px] font-bold opacity-30"
+                  style={{ color: isUrgent ? 'rgb(var(--color-urgent-400))' : g.text }}
+                >
+                  :
+                </span>
+                <span
+                  className="text-[20px] font-bold tracking-tight"
+                  style={{ color: isUrgent ? 'rgb(var(--color-urgent-400))' : g.text }}
+                >
+                  {String(display.seconds).padStart(2, '0')}
+                </span>
+              </>
             )}
-            <span
-              className="text-[20px] font-bold tracking-tight"
-              style={{ color: isUrgent ? 'rgb(var(--color-urgent-400))' : g.text }}
-            >
-              {String(countdown.hours).padStart(2, '0')}
-            </span>
-            <span
-              className="mx-[-1px] text-[16px] font-bold opacity-30"
-              style={{ color: isUrgent ? 'rgb(var(--color-urgent-400))' : g.text }}
-            >
-              :
-            </span>
-            <span
-              className="text-[20px] font-bold tracking-tight"
-              style={{ color: isUrgent ? 'rgb(var(--color-urgent-400))' : g.text }}
-            >
-              {String(countdown.minutes).padStart(2, '0')}
-            </span>
-            <span
-              className="mx-[-1px] text-[16px] font-bold opacity-30"
-              style={{ color: isUrgent ? 'rgb(var(--color-urgent-400))' : g.text }}
-            >
-              :
-            </span>
-            <span
-              className="text-[20px] font-bold tracking-tight"
-              style={{ color: isUrgent ? 'rgb(var(--color-urgent-400))' : g.text }}
-            >
-              {String(countdown.seconds).padStart(2, '0')}
-            </span>
           </div>
           <div className="text-[10px] font-medium text-dark-50/25">
             {t('subscription.expiresAt')}: {formattedDate}
@@ -207,9 +226,25 @@ const CountdownTimer = memo(function CountdownTimer({
  * правки: убранный индикатор зоны расхода (обоснование при самом месте ниже) и
  * `PurchaseCTAButton` без пропа `isMultiTariff`. Здесь они и живут.
  *
- * **Ничего не упрощено намеренно.** Владелец потребовал разделения без
- * переработки; часть информации отсюда выкинут отдельной задачей. Экран обязан
- * выглядеть ровно так, как выглядел до разделения.
+ * Ту самую «отдельную задачу» на упрощение владелец продиктовал в #59, и с тех
+ * пор экран НЕ обязан совпадать с дореформенным. Что изменено по спеке владельца
+ * и переделке не подлежит:
+ *
+ * 1. счётчик печатает только дни, пока остаток не меньше суток (ровно 24 часа —
+ *    это уже «1 дн.»); часы-минуты-секунды — последние сутки, и посекундный тик
+ *    живёт только там;
+ * 2. счётчик и автопродление делят строку пополам на десктопе;
+ * 3. блок локаций удалён целиком — имена сквадов рядовому пользователю ничего
+ *    не говорят;
+ * 4. кнопка подключения — сильный акцент инлайн-стилем, работающий в обеих
+ *    темах, без привязки к зоне расхода трафика;
+ * 5. кнопка продления (`PurchaseCTAButton`) переехала внутрь карточки, под
+ *    кнопку подключения; блок ссылки уехал под пару кнопок.
+ *
+ * Всё остальное на странице осталось как было — упрощать сверх спеки нельзя.
+ *
+ * Ветвящаяся логика (единицы счётчика, период тика, число колонок ряда, состав
+ * акцента) живёт в `./subscriptionState`; разметка её только читает.
  *
  * Блоки, которые страница рендерит, лежат копиями в `src/simple/components/**`
  * по тому же правилу канона: апстримные оригиналы остаются экспертному режиму
@@ -975,94 +1010,122 @@ export function SimpleSubscription() {
                 />
               </div>
 
-              {/* ─── Connect Device Button ─── */}
-              {subscription.subscription_url && (
-                <HoverBorderGradient
-                  as="button"
-                  accentColor={zone.mainHex}
-                  disabled={isAtDeviceLimit}
-                  onClick={() => {
-                    if (isAtDeviceLimit) {
-                      haptic.notification('error');
-                      return;
-                    }
-                    navigate(subscriptionId ? `/connection?sub=${subscriptionId}` : '/connection');
-                  }}
-                  className={`mb-5 flex w-full items-center gap-3.5 rounded-[14px] p-3.5 text-left transition-shadow duration-300${isAtDeviceLimit ? 'cursor-not-allowed opacity-50' : ''}`}
-                  style={{ fontFamily: 'inherit' }}
-                >
-                  <div
-                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] transition-colors duration-500"
-                    style={{ background: `${zone.mainHex}12`, color: zone.mainHex }}
-                  >
-                    <DevicesIcon className="h-4 w-4" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-semibold tracking-tight text-dark-50">
-                      {t('dashboard.connectDevice')}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-dark-50/30">
-                      {subscription.device_limit === 0
-                        ? t('dashboard.devicesConnectedUnlimited', { used: connectedDevices })
-                        : t('dashboard.devicesOfMax', {
-                            used: connectedDevices,
-                            max: subscription.device_limit,
-                          })}
-                    </div>
-                    {isAtDeviceLimit && (
-                      <div
-                        className="mt-1 text-[10px] font-medium"
-                        style={{ color: 'rgb(var(--color-warning-400))' }}
-                      >
-                        {t('dashboard.deviceLimitReached')}
-                      </div>
-                    )}
-                  </div>
-                  {subscription.device_limit === 0 ? (
-                    <div
-                      className="flex flex-shrink-0 items-center text-lg text-dark-50/40"
-                      aria-hidden="true"
+              {/* ─── Connect Device Button ───
+                   Главное действие экрана. Акцент — инлайн-градиент и инлайн-тень
+                   литеральными цветами из `resolveConnectButtonAccent`, свечение В
+                   ПОКОЕ; обоснование приёма и почему не утилиты — в докстринге
+                   функции. Прежний `HoverBorderGradient` убран целиком: он светился
+                   только под курсором, которого нет ни на телефоне, ни в Telegram, а
+                   тон рамки брал из зоны расхода трафика — красил действие статусным
+                   цветом. Внутренности перекрашены в белое: они лежат на заливке. */}
+              {subscription.subscription_url &&
+                (() => {
+                  const connectAccent = resolveConnectButtonAccent(isAtDeviceLimit);
+
+                  return (
+                    <button
+                      type="button"
+                      disabled={isAtDeviceLimit}
+                      onClick={() => {
+                        if (isAtDeviceLimit) {
+                          haptic.notification('error');
+                          return;
+                        }
+                        navigate(
+                          subscriptionId ? `/connection?sub=${subscriptionId}` : '/connection',
+                        );
+                      }}
+                      className={`mb-3 flex w-full items-center gap-3.5 rounded-[14px] p-3.5 text-left transition-shadow duration-300 ${isAtDeviceLimit ? 'cursor-not-allowed opacity-50' : ''}`}
+                      style={{
+                        fontFamily: 'inherit',
+                        background: connectAccent.background,
+                        boxShadow: connectAccent.boxShadow,
+                      }}
                     >
-                      ∞
-                    </div>
-                  ) : subscription.device_limit <= 10 ? (
-                    <div className="flex flex-shrink-0 gap-1.5" aria-hidden="true">
-                      {Array.from({ length: subscription.device_limit }, (_, i) => (
-                        <div
-                          key={i}
-                          className="h-[7px] w-[7px] rounded-full transition-[background-color,box-shadow] duration-300"
-                          style={{
-                            background: i < connectedDevices ? zone.mainHex : g.textGhost,
-                            boxShadow: i < connectedDevices ? `0 0 6px ${zone.mainHex}50` : 'none',
-                          }}
-                        />
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="flex w-16 flex-shrink-0 items-center" aria-hidden="true">
                       <div
-                        className="h-[6px] w-full overflow-hidden rounded-full"
-                        style={{ background: g.textGhost }}
+                        className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px] text-white"
+                        style={{ background: connectAccent.iconBackground }}
                       >
-                        {/* scaleX (compositor) instead of width (layout-thrash).
-                            Track is 64px (w-16), so 0.0625 floor = 4px minimum,
-                            preserving the prior minWidth behaviour. */}
-                        <div
-                          className="h-full w-full origin-left rounded-full transition-transform duration-500"
-                          style={{
-                            transform: `scaleX(${(() => {
-                              const pct = connectedDevices / subscription.device_limit;
-                              return connectedDevices > 0 ? Math.max(pct, 0.0625) : 0;
-                            })()})`,
-                            background: zone.mainHex,
-                            boxShadow: `0 0 8px ${zone.mainHex}40`,
-                          }}
-                        />
+                        <DevicesIcon className="h-4 w-4" />
                       </div>
-                    </div>
-                  )}
-                </HoverBorderGradient>
-              )}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold tracking-tight text-white">
+                          {t('dashboard.connectDevice')}
+                        </div>
+                        <div className="mt-0.5 text-[11px] text-white/70">
+                          {subscription.device_limit === 0
+                            ? t('dashboard.devicesConnectedUnlimited', { used: connectedDevices })
+                            : t('dashboard.devicesOfMax', {
+                                used: connectedDevices,
+                                max: subscription.device_limit,
+                              })}
+                        </div>
+                        {isAtDeviceLimit && (
+                          <div
+                            className="mt-1 text-[10px] font-medium"
+                            style={{ color: '#FFD166' }}
+                          >
+                            {t('dashboard.deviceLimitReached')}
+                          </div>
+                        )}
+                      </div>
+                      {subscription.device_limit === 0 ? (
+                        <div
+                          className="flex flex-shrink-0 items-center text-lg text-white/70"
+                          aria-hidden="true"
+                        >
+                          ∞
+                        </div>
+                      ) : subscription.device_limit <= 10 ? (
+                        <div className="flex flex-shrink-0 gap-1.5" aria-hidden="true">
+                          {Array.from({ length: subscription.device_limit }, (_, i) => (
+                            <div
+                              key={i}
+                              className="h-[7px] w-[7px] rounded-full transition-[background-color,box-shadow] duration-300"
+                              style={{
+                                background:
+                                  i < connectedDevices ? '#FFFFFF' : 'rgba(255,255,255,0.28)',
+                                boxShadow:
+                                  i < connectedDevices ? '0 0 6px rgba(255,255,255,0.55)' : 'none',
+                              }}
+                            />
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="flex w-16 flex-shrink-0 items-center" aria-hidden="true">
+                          <div
+                            className="h-[6px] w-full overflow-hidden rounded-full"
+                            style={{ background: 'rgba(255,255,255,0.24)' }}
+                          >
+                            {/* scaleX (compositor) instead of width (layout-thrash).
+                                Track is 64px (w-16), so 0.0625 floor = 4px minimum,
+                                preserving the prior minWidth behaviour. */}
+                            <div
+                              className="h-full w-full origin-left rounded-full transition-transform duration-500"
+                              style={{
+                                transform: `scaleX(${(() => {
+                                  const pct = connectedDevices / subscription.device_limit;
+                                  return connectedDevices > 0 ? Math.max(pct, 0.0625) : 0;
+                                })()})`,
+                                background: '#FFFFFF',
+                                boxShadow: '0 0 8px rgba(255,255,255,0.5)',
+                              }}
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </button>
+                  );
+                })()}
+
+              {/* ─── Renewal CTA ───
+                   Пара к кнопке подключения: сначала подключить, под ней продлить
+                   (спека владельца #59). Компонент сам решает, что рисовать:
+                   акцентное продление плюс второстепенную «Сменить тариф». Раньше
+                   он стоял СНАРУЖИ карточки, под ней. */}
+              <div className="mb-5">
+                <PurchaseCTAButton subscription={subscription} />
+              </div>
 
               {/* ─── Subscription URL ─── */}
               {displayedConnectionUrl && !shouldHideConnectionLink && (
@@ -1095,42 +1158,79 @@ export function SimpleSubscription() {
                 </div>
               )}
 
-              {/* ─── Countdown ─── */}
-              <div className="mb-5">
-                <CountdownTimer
-                  endDate={subscription.end_date}
-                  isActive={subscription.is_active || subscription.is_limited}
-                  glassColors={g}
-                />
-              </div>
+              {/* ─── Countdown + Autopay row ───
+                   Пополам на десктопе, две строки на мобилке (спека владельца #59).
 
-              {/* ─── Locations ─── */}
-              {subscription.servers && subscription.servers.length > 0 && (
-                <div className="mb-5">
-                  <div className="mb-2 text-[10px] font-medium uppercase tracking-wider text-dark-50/35">
-                    {t('subscription.locationsLabel')}
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {subscription.servers.map((server) => (
-                      <span
-                        key={server.uuid}
-                        className="inline-flex items-center gap-1.5 rounded-[8px] px-2.5 py-1 text-[11px] font-medium text-dark-50/50"
+                   ⚠️ Блок автопродления УСЛОВНЫЙ: его нет у триальной и у суточной
+                   подписки. Поэтому число колонок считает
+                   `resolveSubscriptionInfoRowLayout`, а не литерал в разметке — с
+                   безусловным `lg:grid-cols-2` правая половина строки осталась бы
+                   пустой дырой ровно в этих двух состояниях.
+
+                   ⚠️ Блок локаций отсюда удалён целиком, вместе с заголовком:
+                   имена сквадов (`Default-Squad`) рядовому пользователю ничего не
+                   говорят (решение владельца #59). Вместе с ним ушли импорты
+                   `getFlagEmoji` и `Twemoji` — других потребителей на странице нет. */}
+              {(() => {
+                const hasAutopay = !subscription.is_trial && !subscription.is_daily;
+                const infoRow = resolveSubscriptionInfoRowLayout(hasAutopay);
+
+                return (
+                  <div className={`mb-5 ${infoRow.row}`}>
+                    <CountdownTimer
+                      endDate={subscription.end_date}
+                      isActive={subscription.is_active || subscription.is_limited}
+                      glassColors={g}
+                      className={infoRow.countdown}
+                    />
+
+                    {infoRow.autopay !== null && (
+                      <div
+                        className={`flex h-full items-center justify-between rounded-[14px] p-3.5 ${infoRow.autopay}`}
                         style={{
-                          background: g.innerBorder,
-                          border: `1px solid ${g.trackBg}`,
+                          background: g.innerBg,
+                          border: `1px solid ${g.innerBorder}`,
                         }}
                       >
-                        {server.country_code && (
-                          <span className="text-xs">{getFlagEmoji(server.country_code)}</span>
-                        )}
-                        <Twemoji options={{ className: 'twemoji', folder: 'svg', ext: '.svg' }}>
-                          {server.name}
-                        </Twemoji>
-                      </span>
-                    ))}
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-dark-50">
+                            {t('subscription.autoRenewal')}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-dark-50/30">
+                            {t('subscription.daysBeforeExpiry', {
+                              count: subscription.autopay_days_before,
+                            })}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => autopayMutation.mutate(!subscription.autopay_enabled)}
+                          disabled={autopayMutation.isPending}
+                          role="switch"
+                          aria-checked={subscription.autopay_enabled}
+                          aria-label={t('subscription.autopay', 'Auto-payment')}
+                          className="relative h-7 w-[52px] shrink-0 rounded-full transition-colors duration-300"
+                          style={{
+                            background: subscription.autopay_enabled ? zone.mainHex : g.textGhost,
+                          }}
+                        >
+                          {/* translateX (compositor) instead of left (layout-thrash).
+                              Resting position pinned at left:3px; on toggles a 23px
+                              slide on the GPU. */}
+                          <span
+                            className="absolute left-[3px] top-[3px] h-[22px] w-[22px] rounded-full bg-white transition-transform duration-300"
+                            style={{
+                              transform: subscription.autopay_enabled
+                                ? 'translateX(23px)'
+                                : 'translateX(0)',
+                              boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                            }}
+                          />
+                        </button>
+                      </div>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* ─── Purchased Traffic Packages ─── */}
               {subscription.traffic_purchases && subscription.traffic_purchases.length > 0 && (
@@ -1203,52 +1303,6 @@ export function SimpleSubscription() {
                       </div>
                     ))}
                   </div>
-                </div>
-              )}
-
-              {/* ─── Autopay Toggle ─── */}
-              {!subscription.is_trial && !subscription.is_daily && (
-                <div
-                  className="flex items-center justify-between rounded-[14px] p-3.5"
-                  style={{
-                    background: g.innerBg,
-                    border: `1px solid ${g.innerBorder}`,
-                  }}
-                >
-                  <div>
-                    <div className="text-sm font-semibold text-dark-50">
-                      {t('subscription.autoRenewal')}
-                    </div>
-                    <div className="mt-0.5 text-[11px] text-dark-50/30">
-                      {t('subscription.daysBeforeExpiry', {
-                        count: subscription.autopay_days_before,
-                      })}
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => autopayMutation.mutate(!subscription.autopay_enabled)}
-                    disabled={autopayMutation.isPending}
-                    role="switch"
-                    aria-checked={subscription.autopay_enabled}
-                    aria-label={t('subscription.autopay', 'Auto-payment')}
-                    className="relative h-7 w-[52px] rounded-full transition-colors duration-300"
-                    style={{
-                      background: subscription.autopay_enabled ? zone.mainHex : g.textGhost,
-                    }}
-                  >
-                    {/* translateX (compositor) instead of left (layout-thrash).
-                        Resting position pinned at left:3px; on toggles a 23px
-                        slide on the GPU. */}
-                    <span
-                      className="absolute left-[3px] top-[3px] h-[22px] w-[22px] rounded-full bg-white transition-transform duration-300"
-                      style={{
-                        transform: subscription.autopay_enabled
-                          ? 'translateX(23px)'
-                          : 'translateX(0)',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
-                      }}
-                    />
-                  </button>
                 </div>
               )}
 
@@ -1681,8 +1735,16 @@ export function SimpleSubscription() {
         </div>
       )}
 
-      {/* Purchase / Renewal CTA */}
-      <PurchaseCTAButton subscription={subscription} />
+      {/* ⚠️ Кнопка продления переехала ВНУТРЬ карточки, под кнопку подключения
+          (спека владельца #59): действия стоят парой, и продление больше не
+          отрывается от подписки блоком ссылки и счётчиком.
+
+          Здесь остался ровно один случай — подписки НЕТ. Карточки в этом
+          состоянии тоже нет (вместо неё пустое состояние выше), а
+          `resolveSubscriptionCta(null)` отдаёт единственное действие экрана,
+          «Оформить подписку». Переезд внутрь карточки этот случай не касается,
+          и лишать экран без подписки единственной кнопки он не должен. */}
+      {!subscription && <PurchaseCTAButton subscription={null} />}
 
       {/* Delete expired subscription */}
       {isMultiTariff &&

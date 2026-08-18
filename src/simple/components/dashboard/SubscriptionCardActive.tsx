@@ -196,7 +196,7 @@ export default function SubscriptionCardActive({
             }
             navigate(`/connection?sub=${subscription.id}`);
           }}
-          className={`mb-2.5 flex w-full items-center gap-3.5 rounded-[14px] p-3.5 text-left transition-shadow duration-300${isAtDeviceLimit ? 'cursor-not-allowed opacity-50' : ''}`}
+          className={`mb-2.5 flex w-full items-center gap-3.5 rounded-[14px] p-3.5 text-left transition-shadow duration-300 ${isAtDeviceLimit ? 'cursor-not-allowed opacity-50' : ''}`}
           data-onboarding="connect-devices"
           style={{ fontFamily: 'inherit' }}
         >
