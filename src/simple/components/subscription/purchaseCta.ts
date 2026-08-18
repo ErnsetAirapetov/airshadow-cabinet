@@ -32,14 +32,18 @@ const CHANGE_TARIFF: Omit<SubscriptionCtaAction, 'hintKey'> = {
 };
 
 /**
- * Решает, какие кнопки показать под карточкой подписки.
+ * Полный набор действий подписки — ДО разделения на кнопки и пункт блока (#61).
  *
- * Раньше действие было одно и перегруженное: та же кнопка «Продлить подписку»
- * в мультитарифе вела на продление, а в одно-тарифном режиме — в витрину
- * тарифов (cabinet#19). Теперь продление и смена тарифа — разные кнопки, и
- * ссылка на продление строится по `subscription.id` независимо от режима.
+ * ⚠️ Единственный источник истины для обоих потребителей. Владелец потребовал
+ * перенести «Сменить тариф» в блок «Дополнительные опции», и соблазн был
+ * написать блоку своё условие «когда показывать пункт». Второе правило
+ * разъехалось бы с первым молча, со сборкой зелёной: пункт либо задвоился бы с
+ * кнопкой, либо пропал бы у того, у кого кнопка была. Поэтому набор считается
+ * один раз здесь, а `resolveSubscriptionCta` и `resolveTariffChangeOption`
+ * только делят его между собой — их выдачи по построению не пересекаются и в
+ * сумме дают этот набор.
  */
-export function resolveSubscriptionCta(subscription: Subscription | null): SubscriptionCtaAction[] {
+function resolveAllSubscriptionActions(subscription: Subscription | null): SubscriptionCtaAction[] {
   const isExpired =
     !subscription ||
     (!subscription.is_active && !subscription.is_trial && !subscription.is_limited);
@@ -95,4 +99,47 @@ export function resolveSubscriptionCta(subscription: Subscription | null): Subsc
     },
     change,
   ];
+}
+
+/**
+ * Смена тарифа, переехавшая в блок «Дополнительные опции» (#61), или `null`.
+ *
+ * ⚠️ Переезжает ТОЛЬКО второстепенное действие, то есть смена тарифа, стоявшая
+ * второй кнопкой под продлением. Единственное действие экрана второстепенным не
+ * бывает: у суточной подписки продления нет вовсе, у подписки без id его не
+ * собрать, и там смена тарифа — единственный способ что-то сделать. Унеси её
+ * оттуда в блок — и она задвоилась бы (кнопка осталась бы всё равно) либо
+ * пропала бы у того, кому блок не показывают.
+ */
+export function resolveTariffChangeOption(
+  subscription: Subscription | null,
+): SubscriptionCtaAction | null {
+  const actions = resolveAllSubscriptionActions(subscription);
+  const change = actions.find((action) => action.kind === 'change');
+
+  if (!change || actions.length === 1) return null;
+
+  return change;
+}
+
+/**
+ * Решает, какие кнопки показать под карточкой подписки.
+ *
+ * Раньше действие было одно и перегруженное: та же кнопка «Продлить подписку»
+ * в мультитарифе вела на продление, а в одно-тарифном режиме — в витрину
+ * тарифов (cabinet#19). Продление и смена тарифа стали разными кнопками, а
+ * ссылка на продление строится по `subscription.id` независимо от режима.
+ *
+ * ⚠️ С #61 отсюда вычитается то, что уехало в блок «Дополнительные опции»:
+ * владелец забраковал вид смены тарифа второстепенной кнопкой. Вычитание —
+ * именно вычитание из общего набора, а не своя ветка: так пункт и кнопка не
+ * могут ни разойтись, ни задвоиться.
+ */
+export function resolveSubscriptionCta(subscription: Subscription | null): SubscriptionCtaAction[] {
+  const actions = resolveAllSubscriptionActions(subscription);
+  const moved = resolveTariffChangeOption(subscription);
+
+  if (moved === null) return actions;
+
+  return actions.filter((action) => action.kind !== moved.kind);
 }

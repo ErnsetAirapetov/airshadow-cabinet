@@ -12,6 +12,19 @@
  * (урок #55, `paymentMethodsBento.ts`).
  */
 
+import {
+  resolveTariffChangeOption,
+  type SubscriptionCtaAction,
+} from '../components/subscription/purchaseCta';
+import type { Subscription } from '@/types';
+
+/**
+ * ⚠️ Акцент кнопки «Подключить устройство» переехал отсюда в
+ * `src/simple/components/subscription/connectButtonAccent.ts` (#61): кнопка
+ * стала общим компонентом двух экранов, и держать её акцент в модуле ОДНОЙ
+ * страницы значило бы тянуть главную за импортом в `pages/`.
+ */
+
 /** Сутки в миллисекундах — граница между «днями» и «часами-минутами-секундами». */
 export const COUNTDOWN_DAY_MS = 86_400_000;
 
@@ -127,50 +140,74 @@ export function resolveSubscriptionInfoRowLayout(hasAutopay: boolean): Subscript
       };
 }
 
-export interface ConnectButtonAccent {
-  /** Заливка кнопки. */
-  background: string;
-  /** Свечение В ПОКОЕ. `'none'` — только для состояния «лимит устройств». */
-  boxShadow: string;
-  /** Подложка иконки на заливке. */
-  iconBackground: string;
+export interface AdditionalOptions {
+  /** Блок рисуется вообще. */
+  visible: boolean;
+  /** Покупка устройств. */
+  deviceTopup: boolean;
+  /** Уменьшение числа устройств. */
+  deviceReduction: boolean;
+  /** Покупка трафика. */
+  trafficTopup: boolean;
+  /** Управление серверами. */
+  serverManagement: boolean;
+  /** Смена тарифа; `null` — пункта нет. Адрес берётся отсюда, а не пишется заново. */
+  tariffChange: SubscriptionCtaAction | null;
 }
 
+const NO_OPTIONS: AdditionalOptions = {
+  visible: false,
+  deviceTopup: false,
+  deviceReduction: false,
+  trafficTopup: false,
+  serverManagement: false,
+  tariffChange: null,
+};
+
 /**
- * Акцент кнопки «Подключить устройство».
+ * Состав блока «Дополнительные опции» (задача #61, вариант владельца A).
  *
- * ⚠️ Почему инлайн-стиль и литеральные цвета, а не утилиты и не токены. Утилиты
- * рамки и свечения (`border-accent-*`, `shadow-glow`) в светлой теме подавляются
- * правилами карточек — установлено в #52 и записано в каноне. Инлайн-стиль
- * светлотемные правила перебить не могут в принципе, а литеральный `#3B82F6` не
- * ремапится под `.light`, в отличие от `var(--color-accent-*)`. Ровно этот
- * рецепт работает у красной кнопки пополнения в `SubscriptionCardExpired`.
+ * ⚠️ Что изменилось и почему. Раньше блок целиком стоял под условием
+ * «...и ненулевой лимит устройств», и это было верно, пока все его пункты были
+ * про устройства. С переездом «Сменить тариф» условие стало ловушкой:
+ * `device_limit === 0` — это БЕЗЛИМИТ по устройствам, блока такому человеку не
+ * показывали вовсе, и смена тарифа пропала бы у него совсем (других входов в
+ * витрину для активной платной подписки в простом режиме нет). Поэтому лимит
+ * устройств переехал на сами устройство-зависимые пункты, а блок показывается,
+ * когда в нём есть хоть один пункт.
  *
- * ⚠️ Свечение задано В ПОКОЕ, а не на `:hover`. Прежняя кнопка светилась только
- * под курсором (`.hover-border-gradient:hover` в globals.css), а на телефоне и
- * внутри Telegram наведения не существует — от акцента оставалась рамка в
- * полтора пикселя, и кнопку пролистывали.
+ * ⚠️ Видимость каждого прежнего пункта при этом НЕ ИЗМЕНИЛАСЬ ни для кого:
+ * `hasDevices` — это ровно прежнее внешнее условие блока целиком. Проверено
+ * перебором состояний в `tariffChangeAccess.test.ts`.
  *
- * ⚠️ Единственный аргумент — состояние лимита устройств. Зона расхода трафика в
- * выдачу не входит: кнопка меняла тон по причине, к действию не относящейся
- * (то же правило «не красить действия статусным цветом», по которому тон убрали
- * из плитки тарифа в `SubscriptionCardActive`).
+ * ⚠️ `visible` считается ИЗ ПУНКТОВ, а не отдельным условием: иначе блок мог бы
+ * появиться пустой карточкой с одним заголовком или, наоборот, спрятать
+ * единственный пункт.
  */
-export function resolveConnectButtonAccent(isAtDeviceLimit: boolean): ConnectButtonAccent {
-  if (isAtDeviceLimit) {
-    // Упёрлись в лимит — заливка гасится, свечение снимается совсем. Вместе с
-    // `cursor-not-allowed` и подписью «лимит достигнут» состояние остаётся
-    // отличимым от рабочего, а звать в него уже незачем.
-    return {
-      background: 'linear-gradient(135deg, #2B4A85, #24407A)',
-      boxShadow: 'none',
-      iconBackground: 'rgba(255,255,255,0.12)',
-    };
-  }
+export function resolveAdditionalOptions(
+  subscription: Subscription | null,
+  isTariffsMode: boolean,
+): AdditionalOptions {
+  if (!subscription) return NO_OPTIONS;
+
+  const base = (subscription.is_active || subscription.is_limited) && !subscription.is_trial;
+  const hasDevices = base && subscription.device_limit !== 0;
+
+  const items = {
+    deviceTopup: hasDevices,
+    deviceReduction: hasDevices,
+    trafficTopup: hasDevices && subscription.traffic_limit_gb > 0,
+    serverManagement: hasDevices && !isTariffsMode,
+    tariffChange: base ? resolveTariffChangeOption(subscription) : null,
+  };
 
   return {
-    background: 'linear-gradient(135deg, #3B82F6, #1D4ED8)',
-    boxShadow: '0 6px 24px rgba(59,130,246,0.38)',
-    iconBackground: 'rgba(255,255,255,0.18)',
+    ...items,
+    visible:
+      items.deviceTopup ||
+      items.deviceReduction ||
+      items.trafficTopup ||
+      items.serverManagement ||
+      items.tariffChange !== null,
   };
 }

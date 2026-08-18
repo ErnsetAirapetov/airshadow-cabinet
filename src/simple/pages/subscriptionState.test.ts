@@ -1,10 +1,7 @@
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   COUNTDOWN_DAY_MS,
-  type ConnectButtonAccent,
   isCountdownUrgent,
-  resolveConnectButtonAccent,
   resolveCountdownDisplay,
   resolveCountdownTickMs,
   resolveSubscriptionInfoRowLayout,
@@ -170,101 +167,5 @@ describe('resolveSubscriptionInfoRowLayout: ряд «счётчик и авто�
     expect(resolveSubscriptionInfoRowLayout(true).countdown).toBe(
       resolveSubscriptionInfoRowLayout(false).countdown,
     );
-  });
-});
-
-/** Исходник охраняемого модуля — сигнатуры сверяются текстом, а не через `.length`. */
-const stateSource = readFileSync('src/simple/pages/subscriptionState.ts', 'utf8');
-
-/**
- * Список параметров экспортируемой функции — текстом, со скобочным балансом.
- *
- * ⚠️ Нужен потому, что `Function.length` НЕ СЧИТАЕТ параметры со значением по
- * умолчанию: у `f(a, isDark = true)` длина остаётся единицей. Сторож на `.length`
- * поэтому пропускал бы ровно ту правку, ради запрета которой стоял.
- */
-function parameterList(source: string, name: string): string | null {
-  const marker = `export function ${name}(`;
-  const at = source.indexOf(marker);
-  if (at === -1) return null;
-
-  const open = at + marker.length - 1;
-  let depth = 0;
-  for (let i = open; i < source.length; i += 1) {
-    if (source[i] === '(') depth += 1;
-    else if (source[i] === ')') {
-      depth -= 1;
-      if (depth === 0) return source.slice(open + 1, i).trim();
-    }
-  }
-  return null;
-}
-
-describe('resolveConnectButtonAccent: акцент кнопки подключения', () => {
-  const enabled = resolveConnectButtonAccent(false);
-  const atLimit = resolveConnectButtonAccent(true);
-  const accentParameters = parameterList(stateSource, 'resolveConnectButtonAccent');
-
-  it('в покое — заливка градиентом и свечение', () => {
-    // ⚠️ Причина задачи: у прежней кнопки тень стояла только на `:hover`
-    // (`.hover-border-gradient` в globals.css), а на телефоне и в Telegram
-    // наведения не существует.
-    expect(enabled.background).toMatch(/^linear-gradient\(/);
-    expect(enabled.boxShadow).not.toBe('none');
-    expect(enabled.boxShadow.length).toBeGreaterThan(0);
-  });
-
-  it('цвета литеральные — светлая тема их не перебивает', () => {
-    // Инлайн-стиль правила `.light …` перебить не могут в принципе, а
-    // литеральные `#rrggbb`/`rgba()` не ремапятся под `.light`, в отличие от
-    // токенов `var(--color-accent-*)` (канон, раздел «Акцент на способе оплаты»).
-    for (const value of [enabled.background, enabled.boxShadow, enabled.iconBackground]) {
-      expect(value).not.toContain('var(--');
-    }
-    expect(enabled.background).toMatch(/#[0-9A-Fa-f]{6}/);
-    expect(enabled.boxShadow).toMatch(/rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,/);
-  });
-
-  it('сигнатура разобрана — иначе проверки ниже пустые', () => {
-    // Пара «разбор удался» для `parameterList`: сломайся он — и «второго
-    // параметра нет» проходило бы на любой сигнатуре.
-    expect(stateSource.length).toBeGreaterThan(2000);
-    expect(accentParameters).toBeTruthy();
-    // Самопроверка разбора на синтетических сигнатурах: параметр со значением
-    // по умолчанию и второй параметр обязаны попадать в выдачу целиком.
-    expect(parameterList('export function f(a: boolean, isDark = true): X {', 'f')).toBe(
-      'a: boolean, isDark = true',
-    );
-    expect(parameterList(stateSource, 'такойФункцииНет')).toBeNull();
-  });
-
-  it('в сигнатуре ровно один параметр, и он без значения по умолчанию', () => {
-    // ⚠️ Прежняя проверка была `resolveConnectButtonAccent.length === 1` и
-    // охраняла пустоту: параметр СО ЗНАЧЕНИЕМ ПО УМОЛЧАНИЮ арность функции не
-    // меняет, поэтому добавленный `isDark = true` оставлял её зелёной — ровно
-    // тот случай, против которого сторож и ставился. Здесь читается текст
-    // сигнатуры: и запятая, и `=` краснеют.
-    expect(accentParameters).toMatch(/^isAtDeviceLimit\s*:/);
-    expect(accentParameters).not.toContain(',');
-    expect(accentParameters).not.toContain('=');
-  });
-
-  it('никакой дополнительный аргумент на выдачу не влияет', () => {
-    // Свойство поверх сигнатуры: даже если параметр появится, выдача обязана
-    // остаться прежней при любом его значении. Зоне трафика и теме проникнуть
-    // в акцент неоткуда.
-    const loose = resolveConnectButtonAccent as unknown as (
-      ...args: unknown[]
-    ) => ConnectButtonAccent;
-
-    for (const extra of [true, false, 'light', 'dark', undefined, null]) {
-      expect(loose(false, extra)).toEqual(enabled);
-      expect(loose(true, extra)).toEqual(atLimit);
-    }
-  });
-
-  it('упёрлись в лимит устройств — состояние остаётся отличимым', () => {
-    expect(atLimit.boxShadow).toBe('none');
-    expect(atLimit.background).not.toBe(enabled.background);
   });
 });

@@ -141,12 +141,12 @@ const countdownSource = (() => {
   return from === -1 || to === -1 || to < from ? '' : code.slice(from, to);
 })();
 
-/** Разметка кнопки подключения — от расчёта акцента до кнопки продления. */
-const connectBlock = (() => {
-  const from = at(code, 'resolveConnectButtonAccent(');
-  const to = at(code, '<PurchaseCTAButton');
-  return from === -1 || to === -1 || to < from ? '' : code.slice(from, to);
-})();
+/**
+ * Разметка кнопки подключения со страницы УШЛА в общий компонент (#61):
+ * `src/simple/components/subscription/ConnectDeviceButton.tsx`, сторож —
+ * `connectDeviceButton.test.ts`. Здесь остаётся вызов, и проверяется он ниже.
+ */
+const connectCall = /<ConnectDeviceButton[\s\S]*?\/>/.exec(code)?.[0] ?? '';
 
 /** Период тика счётчика — извлекается, а не сверяется текстом. */
 const intervalPeriod = /setInterval\([\s\S]*?,\s*([^,()]+?)\s*\)/.exec(countdownSource)?.[1];
@@ -213,16 +213,16 @@ describe('разбор страницы после переработки уда
   it('карточка подписки на главной прочитана и опознана', () => {
     // Пара для проверки склейки классов во втором файле: на пустой строке
     // «склеек нет» проходило бы всегда.
-    expect(rawActiveCard.length).toBeGreaterThan(10_000);
-    expect(activeCard).toContain('isAtDeviceLimit');
+    expect(rawActiveCard.length).toBeGreaterThan(5_000);
+    expect(activeCard).toContain('<ConnectDeviceButton');
   });
 
-  it('исходники счётчика и кнопки подключения вырезаны', () => {
+  it('исходник счётчика и вызов кнопки подключения вырезаны', () => {
     expect(countdownSource.length).toBeGreaterThan(500);
-    expect(connectBlock.length).toBeGreaterThan(500);
+    expect(connectCall.length).toBeGreaterThan(50);
     // Кусок счётчика не должен захватить кнопку и наоборот.
-    expect(countdownSource).not.toContain('resolveConnectButtonAccent(');
-    expect(connectBlock).toContain('DevicesIcon');
+    expect(countdownSource).not.toContain('<ConnectDeviceButton');
+    expect(connectCall).toContain('subscription={subscription}');
   });
 
   it('период тика и зависимости эффекта извлечены', () => {
@@ -351,19 +351,32 @@ describe('пункт 3: блока локаций нет (#59)', () => {
   });
 });
 
-describe('пункт 4: акцент кнопки подключения (#59)', () => {
-  it('акцент берётся из чистого модуля инлайн-стилем', () => {
-    // ⚠️ Инлайн, а не утилиты: `border-accent-*` и `shadow-glow` в светлой теме
-    // подавляются правилами карточек (#52, канон). Состав акцента и почему
-    // цвета литеральные — в докстринге `resolveConnectButtonAccent`.
-    expect(connectBlock).toContain('resolveConnectButtonAccent(isAtDeviceLimit)');
-    expect(connectBlock).toContain('background: connectAccent.background');
-    expect(connectBlock).toContain('boxShadow: connectAccent.boxShadow');
+describe('пункт 4: кнопка подключения — общий компонент (#59, #61)', () => {
+  it('страница зовёт общий компонент, а не рисует свою копию', () => {
+    // ⚠️ Состав акцента и запрет литеральных цветов проверяются там, где они
+    // теперь живут, — в `connectDeviceButton.test.ts` и
+    // `connectButtonAccent.test.ts`. Здесь сторожится, что страница ими
+    // ПОЛЬЗУЕТСЯ, а не завела копию заново.
+    expect(connectCall).toContain('connectedDevices={connectedDevices}');
+    expect(code).toContain("from '../components/subscription/ConnectDeviceButton'");
+    expect(code).not.toContain('resolveConnectButtonAccent');
+  });
+
+  it('своей разметки кнопки на странице не осталось', () => {
+    // Заголовок кнопки — самый устойчивый признак её разметки.
+    expect(code).not.toContain('dashboard.connectDevice');
+    expect(code).not.toContain('dashboard.devicesOfMax');
+  });
+
+  it('в апстримной странице разметка кнопки на месте — иначе проверка выше пустая', () => {
+    expect(upstreamCode).toContain("t('dashboard.connectDevice')");
+    expect(upstreamCode).toContain('dashboard.devicesOfMax');
   });
 
   it('тон кнопки не зависит от зоны расхода трафика', () => {
-    // Кнопка меняла цвет по причине, к действию не относящейся.
-    expect(connectBlock).not.toContain('zone.');
+    // Кнопка меняла цвет по причине, к действию не относящейся. Проверка
+    // адресована вызову: `zone` на странице остался для других блоков.
+    expect(connectCall).not.toContain('zone.');
   });
 
   it('HoverBorderGradient со страницы убран целиком', () => {
@@ -378,9 +391,12 @@ describe('пункт 4: акцент кнопки подключения (#59)',
     expect(upstreamCode).toContain('HoverBorderGradient');
   });
 
-  it('состояние «лимит устройств» осталось отличимым', () => {
-    expect(connectBlock).toContain('disabled={isAtDeviceLimit}');
-    expect(connectBlock).toContain("t('dashboard.deviceLimitReached')");
+  it('состояние «лимит устройств» считает сам компонент', () => {
+    // Два независимых расчёта разъехались бы молча: кнопка выключена на одном
+    // экране и жива на другом. Отличимость состояния сторожится в
+    // `connectDeviceButton.test.ts` и `connectButtonAccent.test.ts`.
+    expect(code).not.toContain('isAtDeviceLimit');
+    expect(code).not.toContain('deviceLimitReached');
   });
 });
 
@@ -393,10 +409,11 @@ describe('пункт 4b: склейка классов починена в об�
     expect(gluedClassTemplates(activeCard)).toEqual([]);
   });
 
-  it('класс состояния действительно выдаётся, а не просто «склейки нет»', () => {
-    // Парная проверка: пустой файл склеек тоже не содержит.
-    expect(code).toContain("${isAtDeviceLimit ? 'cursor-not-allowed opacity-50' : ''}");
-    expect(activeCard).toContain("${isAtDeviceLimit ? 'cursor-not-allowed opacity-50' : ''}");
+  it('шаблоны классов в обоих файлах есть, а не просто «склейки нет»', () => {
+    // Парная проверка: пустой файл склеек тоже не содержит. Сам класс
+    // состояния переехал в общий компонент (#61) и сторожится там.
+    expect(classNameTemplates(code).length).toBeGreaterThan(0);
+    expect(classNameTemplates(activeCard).length).toBeGreaterThan(0);
   });
 });
 
@@ -404,7 +421,7 @@ describe('пункты 5 и 6: порядок блоков карточки (#59
   /** Якоря — код, а не заголовки-комментарии: комментарий переписать дешевле блока. */
   const ORDER: [string, string][] = [
     ['трафик', '<TrafficProgressBar'],
-    ['подключить устройство', 'resolveConnectButtonAccent('],
+    ['подключить устройство', '<ConnectDeviceButton'],
     ['продлить подписку', '<PurchaseCTAButton subscription={subscription} />'],
     ['ссылка', 'displayedConnectionUrl && !shouldHideConnectionLink'],
     ['счётчик и автопродление', 'resolveSubscriptionInfoRowLayout('],
@@ -447,5 +464,75 @@ describe('пункты 5 и 6: порядок блоков карточки (#59
     // отдаёт единственное действие экрана — «Оформить подписку».
     expect(code).toContain('{!subscription && <PurchaseCTAButton subscription={null} />}');
     expect(countOf(code, '<PurchaseCTAButton')).toBe(2);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Блок «Дополнительные опции» после переезда смены тарифа (задача #61).
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+/** Разметка блока «Дополнительные опции» — от его условия до следующего блока. */
+const optionsBlock = (() => {
+  const from = at(code, '{subscription && additionalOptions.visible && (');
+  const to = at(code, 'subscription.revoke.button');
+  return from === -1 || to === -1 || to < from ? '' : code.slice(from, to);
+})();
+
+describe('блок «Дополнительные опции» рисуется по чистой функции (#61)', () => {
+  it('разметка блока вырезана — иначе проверки по ней пустые', () => {
+    expect(optionsBlock.length).toBeGreaterThan(1000);
+    expect(optionsBlock).toContain('additionalOptions.tariffChange');
+    // Кусок не должен захватить соседний блок перевыпуска.
+    expect(optionsBlock).not.toContain('subscription.revoke');
+  });
+
+  it('состав блока считает `resolveAdditionalOptions`, а не условия в разметке', () => {
+    // ⚠️ Сердце пункта. Условие в JSX — это второй источник истины, и он
+    // разъехался бы с правилом смены тарифа из `purchaseCta` молча.
+    expect(code).toContain('resolveAdditionalOptions(');
+    expect(code).toContain('{subscription && additionalOptions.visible && (');
+  });
+
+  it('прежнего условия «ненулевой лимит устройств» в разметке не осталось', () => {
+    // Оно и было ловушкой: `device_limit === 0` — это БЕЗЛИМИТ по устройствам,
+    // и такому пользователю блока не показывали вовсе.
+    expect(code).not.toContain('device_limit !== 0');
+  });
+
+  it('в апстримной странице это условие на месте — иначе проверка выше пустая', () => {
+    expect(upstreamCode).toContain('device_limit !== 0');
+  });
+
+  it('каждый пункт блока выдаётся по своему флагу из той же функции', () => {
+    for (const flag of [
+      'additionalOptions.deviceTopup &&',
+      'additionalOptions.deviceReduction &&',
+      'additionalOptions.trafficTopup &&',
+      'additionalOptions.serverManagement &&',
+      'additionalOptions.tariffChange &&',
+    ]) {
+      expect(`${flag}: ${code.includes(flag)}`).toBe(`${flag}: true`);
+    }
+  });
+
+  it('своих условий у пунктов не осталось', () => {
+    // Два условия на один пункт разъехались бы: функция говорит «показать»,
+    // разметка молчит.
+    expect(code).not.toContain('subscription.traffic_limit_gb > 0 && (');
+    expect(code).not.toContain('{!isTariffsMode && (');
+  });
+
+  it('пункт смены тарифа берёт действие и адрес из выдачи, а не пишет свои', () => {
+    expect(code).toContain('<TariffChangeOption action={additionalOptions.tariffChange}');
+    expect(code).not.toContain("'/subscription/purchase'");
+  });
+
+  it('отступы между пунктами задаёт контейнер, а не сами пункты', () => {
+    // При `mt-4` на каждом кроме первого блок с единственным пунктом получил бы
+    // лишний отступ под заголовком, а какой пункт окажется первым — переменная.
+    // Проверка адресована самому блоку: `mt-4` в других местах страницы к делу
+    // не относится.
+    expect(optionsBlock).toContain('<div className="space-y-4">');
+    expect(optionsBlock).not.toContain('mt-4');
   });
 });
