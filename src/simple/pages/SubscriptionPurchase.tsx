@@ -2,24 +2,53 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router';
-import { subscriptionApi } from '../api/subscription';
-import { WebBackButton } from '../components/WebBackButton';
-import { getGlassColors } from '../utils/glassTheme';
-import { useTheme } from '../hooks/useTheme';
-import type { Tariff, ClassicPurchaseOptions } from '../types';
-import { useCloseOnSuccessNotification } from '../store/successNotification';
-import { SwitchTariffSheet } from '../components/subscription/sheets/SwitchTariffSheet';
-import { TariffPurchaseForm } from '../components/subscription/purchase/TariffPurchaseForm';
-import { TariffPickerGrid } from '../components/subscription/purchase/TariffPickerGrid';
-import { ClassicPurchaseWizard } from '../components/subscription/purchase/ClassicPurchaseWizard';
-import { ExclamationIcon, SparklesIcon } from '@/components/icons';
 
-export default function SubscriptionPurchase() {
+import { subscriptionApi } from '@/api/subscription';
+import { ExclamationIcon } from '@/components/icons';
+import { useTheme } from '@/hooks/useTheme';
+import { useCloseOnSuccessNotification } from '@/store/successNotification';
+import type { Tariff } from '@/types';
+import { getGlassColors } from '@/utils/glassTheme';
+import { WebBackButton } from '../components/WebBackButton';
+import { ClassicPurchaseWizard } from '../components/subscription/purchase/ClassicPurchaseWizard';
+import { TariffPickerGrid } from '../components/subscription/purchase/TariffPickerGrid';
+import { TariffPurchaseForm } from '../components/subscription/purchase/TariffPurchaseForm';
+import { SwitchTariffSheet } from '../components/subscription/sheets/SwitchTariffSheet';
+import {
+  resolvePurchaseBackTarget,
+  resolvePurchaseScreen,
+  resolvePurchaseSubscriptionId,
+  resolvePurchaseTitleKey,
+  resolveSalesMode,
+} from './subscriptionPurchaseState';
+
+/**
+ * Покупка и продление подписки в простом режиме (задача #29).
+ *
+ * ⚠️ Это НЕ новый интерфейс, а копия апстримного
+ * `src/pages/SubscriptionPurchase.tsx`. Спека владельца от 18.08.2026 меняет на
+ * этом экране ровно один блок: из витрины тарифов убран виджет промо-группы
+ * («Ваша группа: …»). Больше ничего не правим — так в спеке дословно.
+ *
+ * Изъятие живёт в копии витрины
+ * (`../components/subscription/purchase/TariffPickerGrid`), а не здесь:
+ * апстримный блок был внутри неё. Оригиналы всех четырёх компонентов остаются
+ * экспертному режиму нетронутыми — канон docs/architecture/two-modes.md.
+ *
+ * ⚠️ Обе ветки режима продаж обязаны работать. На стенде видна только тарифная,
+ * но `sales_mode: 'classic'` — единственный способ купить подписку на
+ * инсталляции без тарифов, и потеряй мы её, экран там окажется пустым. Выбор
+ * ветки поэтому вынесен в `./subscriptionPurchaseState` и покрыт тестами: сам
+ * экран отрисовкой не проверяется — компонентных тестов в проекте не бывает.
+ *
+ * ⚠️ Хром апстримный: `getGlassColors` + классы напрямую. Анимационные варианты
+ * `@/components/motion/transitions` за границей режимов — тот же приём, что в
+ * остальных простых страницах.
+ */
+export function SimpleSubscriptionPurchase() {
   const { t } = useTranslation();
   const [searchParams] = useSearchParams();
-  const subscriptionId = searchParams.get('subscriptionId')
-    ? parseInt(searchParams.get('subscriptionId')!, 10)
-    : undefined;
+  const subscriptionId = resolvePurchaseSubscriptionId(searchParams);
   const { isDark } = useTheme();
   const g = getGlassColors(isDark);
 
@@ -46,12 +75,6 @@ export default function SubscriptionPurchase() {
     refetchOnMount: 'always',
   });
 
-  // Sales mode detection
-  const isTariffsMode = purchaseOptions?.sales_mode === 'tariffs';
-  const classicOptions = !isTariffsMode ? (purchaseOptions as ClassicPurchaseOptions) : null;
-  const tariffs =
-    isTariffsMode && purchaseOptions && 'tariffs' in purchaseOptions ? purchaseOptions.tariffs : [];
-
   // Multi-tariff: check via subscriptions list query
   const { data: multiSubData } = useQuery({
     queryKey: ['subscriptions-list'],
@@ -60,44 +83,38 @@ export default function SubscriptionPurchase() {
   });
   const isMultiTariff = multiSubData?.multi_tariff_enabled ?? false;
 
-  // (active promo discount + applyPromoDiscount live in usePromoDiscount;
-  //  consumed directly by the sub-components, not threaded as props)
-
-  // (classic-mode state moved into <ClassicPurchaseWizard>)
-
   // Tariffs mode state
   const [selectedTariff, setSelectedTariff] = useState<Tariff | null>(null);
   const [showTariffPurchase, setShowTariffPurchase] = useState(false);
-  // (selectedTariffPeriod / customDays / customTrafficGb / useCustomDays /
-  //  useCustomTraffic moved into <TariffPurchaseForm>; form remounts with
-  //  fresh state via key=tariff.id when the parent picks a new tariff)
-
-  // (tariffPurchaseRef moved into <TariffPurchaseForm>; switch-modal ref
-  //  moved into <SwitchTariffSheet>)
 
   // Tariff switch
   const [switchTariffId, setSwitchTariffId] = useState<number | null>(null);
 
   // Auto-close all modals on success notification
   const handleCloseAllModals = () => {
-    // setShowPurchaseForm moved into <ClassicPurchaseWizard>'s own useCloseOnSuccessNotification
     setShowTariffPurchase(false);
     setSwitchTariffId(null);
-
     setSelectedTariff(null);
-    // (selectedTariffPeriod lives inside <TariffPurchaseForm> now; unmount clears it)
   };
   useCloseOnSuccessNotification(handleCloseAllModals);
 
-  // (switch preview query + switchTariffMutation moved into <SwitchTariffSheet>)
+  // Выбор ветки продаж и состояния экрана — в чистом модуле рядом.
+  const screen = resolvePurchaseScreen({
+    isSubscriptionLoading: isLoading,
+    isOptionsLoading: optionsLoading,
+    isOptionsError: optionsError,
+    purchaseOptions,
+  });
+  const {
+    isTariffsMode,
+    tariffs,
+    classicOptions,
+    showTariffsSection,
+    showClassicSection,
+    showNoOptionsFallback,
+  } = resolveSalesMode(purchaseOptions);
 
-  // (tariffPurchaseMutation moved into <TariffPurchaseForm>)
-  // (auto-scroll effects: switch-modal into <SwitchTariffSheet>,
-  //  tariff-purchase into <TariffPurchaseForm>)
-
-  // (classic-mode helpers moved into <ClassicPurchaseWizard>)
-
-  if (isLoading || optionsLoading) {
+  if (screen === 'loading') {
     return (
       <div className="flex min-h-64 items-center justify-center">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-accent-500 border-t-transparent" />
@@ -105,7 +122,7 @@ export default function SubscriptionPurchase() {
     );
   }
 
-  if (optionsError || (!purchaseOptions && !optionsLoading)) {
+  if (screen === 'error') {
     return (
       <div className="space-y-6">
         <h1 className="text-2xl font-bold text-dark-50 sm:text-3xl">{t('subscription.extend')}</h1>
@@ -134,22 +151,14 @@ export default function SubscriptionPurchase() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-3">
-        <WebBackButton
-          to={subscriptionId ? `/subscriptions/${subscriptionId}` : '/subscriptions'}
-        />
+        <WebBackButton to={resolvePurchaseBackTarget(subscriptionId)} />
         <h1 className="text-2xl font-bold text-dark-50 sm:text-3xl">
-          {isMultiTariff && !subscriptionId
-            ? t('subscription.newTariff', 'Новый тариф')
-            : !isMultiTariff && subscription?.is_daily && !subscription?.is_trial
-              ? t('subscription.switchTariff.title')
-              : subscription && !subscription.is_trial
-                ? t('subscription.extend')
-                : t('subscription.getSubscription')}
+          {t(resolvePurchaseTitleKey({ isMultiTariff, subscriptionId, subscription }))}
         </h1>
       </div>
 
       {/* Tariffs Section */}
-      {isTariffsMode && tariffs.length > 0 && (
+      {showTariffsSection && (
         <div
           className="relative overflow-hidden rounded-3xl"
           style={{
@@ -159,50 +168,19 @@ export default function SubscriptionPurchase() {
             padding: '24px 28px',
           }}
         >
-          {/* Trial upgrade prompt — hidden when expired banner is active */}
-          {subscription?.is_trial &&
-            !(
-              isTariffsMode &&
-              purchaseOptions &&
-              'subscription_is_expired' in purchaseOptions &&
-              purchaseOptions.subscription_is_expired
-            ) && (
-              <div
-                className="mb-6 rounded-[14px] p-4"
-                style={{
-                  background:
-                    'linear-gradient(135deg, rgba(255,184,0,0.08), rgba(var(--color-accent-400),0.06))',
-                  border: '1px solid rgba(255,184,0,0.15)',
-                }}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px]"
-                    style={{
-                      background: 'rgba(255,184,0,0.12)',
-                      color: 'rgb(var(--color-urgent-400))',
-                    }}
-                  >
-                    <SparklesIcon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <div
-                      className="text-sm font-semibold"
-                      style={{ color: 'rgb(var(--color-urgent-400))' }}
-                    >
-                      {t('subscription.trialUpgrade.title')}
-                    </div>
-                    <div className="mt-1 text-[12px] text-dark-50/40">
-                      {t('subscription.trialUpgrade.description')}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+          {/* Блок «Выберите тариф для продолжения» (`subscription.trialUpgrade`)
+              убран: он занимал верх экрана, повторяя то, что и так очевидно из
+              списка тарифов ниже. Апстримный блок стоял ровно здесь — см.
+              оригинал `src/pages/SubscriptionPurchase.tsx`.
+
+              ⚠️ Обоснование переехало сюда из комментария в самом апстримном
+              файле: правка форка откачена к апстриму в этом же MR (решение
+              оркестратора по задаче #29), и экспертный режим блок себе вернул.
+              Предупреждения об истёкшей и legacy-подписке остаются — они несут
+              информацию. */}
 
           {/* Expired subscription notice */}
-          {isTariffsMode &&
-            purchaseOptions &&
+          {purchaseOptions &&
             'subscription_is_expired' in purchaseOptions &&
             purchaseOptions.subscription_is_expired && (
               <div
@@ -280,7 +258,6 @@ export default function SubscriptionPurchase() {
             />
           ) : (
             selectedTariff && (
-              /* Tariff Purchase Form (extracted into its own component) */
               <TariffPurchaseForm
                 key={selectedTariff.id}
                 tariff={selectedTariff}
@@ -309,7 +286,7 @@ export default function SubscriptionPurchase() {
       )}
 
       {/* Purchase/Extend Section - Classic Mode */}
-      {classicOptions && classicOptions.periods.length > 0 && (
+      {showClassicSection && classicOptions && (
         <ClassicPurchaseWizard
           classicOptions={classicOptions}
           subscription={subscription}
@@ -318,28 +295,25 @@ export default function SubscriptionPurchase() {
       )}
 
       {/* No options available fallback */}
-      {purchaseOptions &&
-        !optionsLoading &&
-        !(isTariffsMode && tariffs.length > 0) &&
-        !(classicOptions && classicOptions.periods.length > 0) && (
-          <div
-            className="rounded-3xl p-6 text-center"
-            style={{
-              background: g.cardBg,
-              border: `1px solid ${g.cardBorder}`,
-            }}
+      {showNoOptionsFallback && (
+        <div
+          className="rounded-3xl p-6 text-center"
+          style={{
+            background: g.cardBg,
+            border: `1px solid ${g.cardBorder}`,
+          }}
+        >
+          <p className="mb-4 text-dark-300">
+            {t('subscription.noOptionsAvailable', 'Нет доступных вариантов подписки')}
+          </p>
+          <button
+            onClick={() => refetchOptions()}
+            className="rounded-xl bg-accent-500 px-6 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-accent-600"
           >
-            <p className="mb-4 text-dark-300">
-              {t('subscription.noOptionsAvailable', 'Нет доступных вариантов подписки')}
-            </p>
-            <button
-              onClick={() => refetchOptions()}
-              className="rounded-xl bg-accent-500 px-6 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-accent-600"
-            >
-              {t('common.retry')}
-            </button>
-          </div>
-        )}
+            {t('common.retry')}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
