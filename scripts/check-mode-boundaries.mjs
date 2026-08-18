@@ -118,6 +118,13 @@ const INFRA_ALLOWLIST = new Set([
   // AppShell. Без него простой режим остался бы на голом фоне, что выглядит
   // как сломанная страница, а не как упрощение.
   'src/components/backgrounds/BackgroundHost',
+  // Toast держит React-контекст, а ToastProvider монтируется глобально в
+  // src/AppWithNavigator.tsx — ВЫШЕ шва простого режима. Копия завела бы второй
+  // контекст, ни к чему не подключённый: useToast из копии искал бы провайдера,
+  // которого никто не рендерит, и бросал бы «must be used within ToastProvider»
+  // на первом же уведомлении (#28). Это ровно основание 1 — инфраструктура, без
+  // которой общие механизмы молча не работают.
+  'src/components/Toast',
   // Элементы шапки, показываемые без изменений (#47) — основание 2 выше.
   'src/components/TicketNotificationBell',
   'src/components/LanguageSwitcher',

@@ -3,20 +3,20 @@ import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useParams } from 'react-router';
-import { subscriptionApi } from '../api/subscription';
-import { DEVICE_ALIAS_MAX_LENGTH } from '../constants/devices';
+import { subscriptionApi } from '@/api/subscription';
+import { DEVICE_ALIAS_MAX_LENGTH } from '@/constants/devices';
 import { WebBackButton } from '../components/WebBackButton';
-import { useDestructiveConfirm } from '../platform/hooks/useNativeDialog';
+import { useDestructiveConfirm } from '@/platform/hooks/useNativeDialog';
 import TrafficProgressBar from '../components/dashboard/TrafficProgressBar';
-import { HoverBorderGradient } from '../components/ui/hover-border-gradient';
-import { useTrafficZone } from '../hooks/useTrafficZone';
-import { formatTraffic } from '../utils/formatTraffic';
-import { getGlassColors } from '../utils/glassTheme';
-import { copyToClipboard } from '../utils/clipboard';
-import { useTheme } from '../hooks/useTheme';
+import { HoverBorderGradient } from '@/components/ui/hover-border-gradient';
+import { useTrafficZone } from '@/hooks/useTrafficZone';
+import { formatTraffic } from '@/utils/formatTraffic';
+import { getGlassColors } from '@/utils/glassTheme';
+import { copyToClipboard } from '@/utils/clipboard';
+import { useTheme } from '@/hooks/useTheme';
 import InsufficientBalancePrompt from '../components/InsufficientBalancePrompt';
-import { useCurrency } from '../hooks/useCurrency';
-import { useCloseOnSuccessNotification } from '../store/successNotification';
+import { useCurrency } from '@/hooks/useCurrency';
+import { useCloseOnSuccessNotification } from '@/store/successNotification';
 import PurchaseCTAButton from '../components/subscription/PurchaseCTAButton';
 import {
   CopyIcon,
@@ -27,28 +27,28 @@ import {
   DevicesIcon,
   DownloadIcon,
   TrashIcon,
-} from '../components/icons';
-import { useHaptic, usePlatform } from '../platform';
-import { resolveConnectionUrlForUi } from '../utils/connectionLink';
+} from '@/components/icons';
+import { useHaptic, usePlatform } from '@/platform';
+import { resolveConnectionUrlForUi } from '@/utils/connectionLink';
 import {
   getErrorMessage,
   getInsufficientBalanceError,
   getFlagEmoji,
-} from '../utils/subscriptionHelpers';
-import { openPaymentUrl } from '../utils/openPaymentUrl';
-import { useToast } from '../components/Toast';
+} from '@/utils/subscriptionHelpers';
+import { openPaymentUrl } from '@/utils/openPaymentUrl';
+import { useToast } from '@/components/Toast';
 import {
   isSbpFeatureDisabledError,
   sbpIntervalLabelKey,
   sbpUiState,
   type SbpUiState,
-} from '../utils/sbpRecurring';
+} from '@/utils/sbpRecurring';
 import {
   isLavaFeatureDisabledError,
   lavaPeriodLabelKey,
   lavaUiState,
   type LavaUiState,
-} from '../utils/lavaRecurring';
+} from '@/utils/lavaRecurring';
 import Twemoji from 'react-twemoji';
 import { DeviceTopupSheet } from '../components/subscription/sheets/DeviceTopupSheet';
 import { DeviceReductionSheet } from '../components/subscription/sheets/DeviceReductionSheet';
@@ -198,7 +198,28 @@ const CountdownTimer = memo(function CountdownTimer({
   );
 });
 
-export default function Subscription() {
+/**
+ * Страница подписки простого режима.
+ *
+ * ⚠️ Это КОПИЯ апстримной `src/pages/Subscription.tsx` (#28), а не новый экран.
+ * Задача #28 только разделяла страницы: апстримный файл вернулся к
+ * `upstream/main` побайтово, а всё, что форк успел в нём накопить, — ровно две
+ * правки: убранный индикатор зоны расхода (обоснование при самом месте ниже) и
+ * `PurchaseCTAButton` без пропа `isMultiTariff`. Здесь они и живут.
+ *
+ * **Ничего не упрощено намеренно.** Владелец потребовал разделения без
+ * переработки; часть информации отсюда выкинут отдельной задачей. Экран обязан
+ * выглядеть ровно так, как выглядел до разделения.
+ *
+ * Блоки, которые страница рендерит, лежат копиями в `src/simple/components/**`
+ * по тому же правилу канона: апстримные оригиналы остаются экспертному режиму
+ * нетронутыми, копии упрощаются свободно (docs/architecture/two-modes.md).
+ *
+ * Отличия от апстримного файла, кроме двух правок выше, — механические:
+ * переписанные пути импортов и имя экспорта (`SimpleSubscription` вместо
+ * `default`, как у остальных простых страниц).
+ */
+export function SimpleSubscription() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { formatAmount, currencySymbol } = useCurrency();
@@ -739,24 +760,12 @@ export default function Subscription() {
               {/* ─── Header ─── */}
               <div className="mb-6 flex items-start justify-between">
                 <div>
-                  {/* Zone indicator */}
-                  <div className="mb-1 flex items-center gap-2">
-                    <div
-                      className="h-2 w-2 rounded-full"
-                      style={{
-                        background: zone.mainHex,
-                        boxShadow: `0 0 8px ${zone.mainHex}80`,
-                        transition: 'all 0.6s ease',
-                      }}
-                      aria-hidden="true"
-                    />
-                    <span
-                      className="font-mono text-[11px] font-semibold uppercase tracking-widest"
-                      style={{ color: zone.mainHex, transition: 'color 0.6s ease' }}
-                    >
-                      {isUnlimited ? t('dashboard.unlimited') : t(zone.labelKey)}
-                    </span>
-                  </div>
+                  {/* Индикатор зоны расхода убран целиком — и слово, и точка.
+                      Слово («Норма» / «Умеренный» / «Высокий» / «Критический», плюс
+                      «Безлимит») было третьим способом сказать то же, что «X / Y ГБ»
+                      с полосой ниже, причём самым бедным: ведро без шкалы. Точка без
+                      подписи не объясняет, что означает её цвет, а зона и без неё
+                      красит всю карточку — рамку, полосу, точки устройств, спарклайн. */}
 
                   {/* Plan name */}
                   <h2 className="text-lg font-bold tracking-tight text-dark-50">
@@ -1673,7 +1682,7 @@ export default function Subscription() {
       )}
 
       {/* Purchase / Renewal CTA */}
-      <PurchaseCTAButton subscription={subscription} isMultiTariff={isMultiTariff} />
+      <PurchaseCTAButton subscription={subscription} />
 
       {/* Delete expired subscription */}
       {isMultiTariff &&

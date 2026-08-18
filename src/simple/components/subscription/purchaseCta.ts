@@ -1,4 +1,4 @@
-import type { Subscription } from '../../types';
+import type { Subscription } from '@/types';
 
 /**
  * Что делает кнопка:

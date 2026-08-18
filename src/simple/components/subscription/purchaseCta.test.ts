@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveSubscriptionCta } from './purchaseCta';
-import type { Subscription } from '../../types';
+import type { Subscription } from '@/types';
 
 /**
  * Раскладка кнопок на карточке подписки (задача cabinet#19). Логика вынесена в
