@@ -55,6 +55,19 @@ export const simpleRoutes: SimpleRoute[] = [
   { path: '/balance/top-up', component: SimpleTopUpMethodSelect },
   { path: '/balance/top-up/:methodId', component: SimpleTopUpAmount },
   { path: '/subscription/purchase', component: SimpleSubscriptionPurchase },
+  // ⚠️ Адрес апстримного СПИСКА подписок отдан странице ПОДПИСКИ, и это решение
+  // владельца (#60), а не промах. Пункт меню «Подписка» ведёт сюда; апстримный
+  // список сам уходил с этого адреса на карточку — но только после ответа
+  // сервера, и человек успевал увидеть мелькание экспертной оболочки. Простая
+  // страница работает и без идентификатора: `getSubscription(undefined)` отдаёт
+  // текущую подписку. Следствие принято: у кого подписок несколько, увидит одну
+  // (канон, «одна подписка — одна карточка»).
+  //
+  // ⚠️ Литерал рядом с двумя записями-параметрами ниже. Сегодня он выиграл бы и
+  // без ранжирования — стоит выше них в массиве, — но ранжирование в
+  // `matchSimpleRoute` страхует от перестановки записей и от появления параметра
+  // выше. Зонд по всем трём адресам стоит в `routes.test.tsx`.
+  { path: '/subscriptions', component: SimpleSubscription },
   { path: '/subscriptions/:subscriptionId', component: SimpleSubscription },
   { path: '/subscriptions/:subscriptionId/renew', component: SimpleRenewSubscription },
 ];
