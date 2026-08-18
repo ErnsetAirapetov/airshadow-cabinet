@@ -65,7 +65,23 @@ const ALLOWED_TOKENS = new Set(['linear-gradient', 'var', 'rgb', 'rgba', 'none',
  */
 const LIGHT_REMAPPED_SHADES = new Set(['300', '400']);
 
+/**
+ * Самый светлый акцентный шейд, которому в этом модуле есть место (задача #62).
+ *
+ * ⚠️ Правило от обратного, и оно закрывает КЛАСС, а не случай. Жалоба владельца
+ * 18.08.2026 была не «пятисотый неудачен», а «кнопка кислотно яркая, в светлой
+ * теме вырвиглазно». Яркость давали именно светлые шейды акцента, поэтому запрет
+ * стоит не на конкретном поле заливки, а на любом употреблении шейда ниже
+ * шестисотого где угодно в выдаче: вернётся яркость в свечении, в подложке
+ * иконки или в дорожке индикатора — покраснеет здесь, а не через месяц по второй
+ * жалобе. Исключения ровно два: `--color-on-accent` (это не шейд, а считанный
+ * контрастный цвет) и `--color-warning-200` у подписи лимита — она лежит НА
+ * заливке, и там светлый тон и нужен.
+ */
+const MIN_ACCENT_SHADE = 600;
+
 const PALETTE_VAR = /^--color-(?:accent|warning|success|error)-(\d{2,3})$/;
+const ACCENT_VAR = /^--color-accent-(\d{2,3})$/;
 
 /**
  * Переменная темы, которой кнопке разрешено краситься.
@@ -75,13 +91,20 @@ const PALETTE_VAR = /^--color-(?:accent|warning|success|error)-(\d{2,3})$/;
  * подпись «лимит достигнут» стояла на `--color-warning-400` и в светлой теме
  * превращалась в `--color-warning-700`, тёмно-оранжевый на синей заливке с
  * контрастом 1.37 к одному.
+ *
+ * ⚠️ С #62 к нему добавлено второе условие — акцент не светлее шестисотого.
+ * Запрет ремапящихся шейдов сам по себе кислотность не ловит: `--color-accent-500`
+ * ремапу не подвержен и прошёл бы, а именно он и давал яркость.
  */
 function isAllowedVar(name: string): boolean {
   if (name === '--color-on-accent') return true;
 
   const shade = PALETTE_VAR.exec(name)?.[1];
+  if (shade === undefined || LIGHT_REMAPPED_SHADES.has(shade)) return false;
 
-  return shade !== undefined && !LIGHT_REMAPPED_SHADES.has(shade);
+  const accentShade = ACCENT_VAR.exec(name)?.[1];
+
+  return accentShade === undefined || Number(accentShade) >= MIN_ACCENT_SHADE;
 }
 
 /**
@@ -120,6 +143,21 @@ function hexLiterals(value: string): string[] {
   return [...value.matchAll(/#[0-9A-Fa-f]{3,8}/g)].map((match) => match[0]);
 }
 
+/** Пиксельные длины значения — смещения и радиус размытия тени. */
+function pixelLengths(value: string): number[] {
+  return [...value.matchAll(/(-?\d+(?:\.\d+)?)px/g)].map((match) => Number(match[1]));
+}
+
+/**
+ * Прозрачности значения — последний аргумент каждого `rgba()`.
+ *
+ * ⚠️ Ищется именно «число перед закрывающей скобкой», иначе шейд из
+ * `rgba(var(--color-accent-900), 0.25)` уехал бы в выдачу как число 900.
+ */
+function alphaValues(value: string): number[] {
+  return [...value.matchAll(/,\s*([01](?:\.\d+)?)\s*\)/g)].map((match) => Number(match[1]));
+}
+
 const enabled = resolveConnectButtonAccent(false);
 const atLimit = resolveConnectButtonAccent(true);
 const everyValue: string[] = [...Object.values(enabled), ...Object.values(atLimit)];
@@ -148,23 +186,40 @@ describe('разбор удался', () => {
     expect(hexLiterals('linear-gradient(135deg, #3B82F6, #1D4ED8)')).toHaveLength(2);
     expect(hexLiterals('rgb(var(--color-accent-500))')).toHaveLength(0);
     expect(rgbSources('0 6px 24px rgba(59,130,246,0.38)')).toEqual(['59']);
-    expect(rgbSources('rgba(var(--color-accent-500), 0.38)')).toEqual(['var(--color-accent-500']);
+    expect(rgbSources('rgba(var(--color-accent-900), 0.25)')).toEqual(['var(--color-accent-900']);
     expect(foreignTokens('rgba(255,255,255,0.18)')).toEqual([]);
     expect(foreignTokens('1px solid white')).toEqual(['solid', 'white']);
     expect(foreignTokens('rgb(var(--color-critical-500))')).toEqual(['--color-critical-500']);
-    expect(foreignTokens('linear-gradient(135deg, rgb(var(--color-accent-500)))')).toEqual([]);
+    expect(foreignTokens('linear-gradient(135deg, rgb(var(--color-accent-600)))')).toEqual([]);
+  });
+
+  it('разбор длин и прозрачностей работает на синтетических значениях', () => {
+    // Самопроверка: сломайся любой из двух — и «тень короткая и тихая» ниже
+    // проходило бы на чём угодно, включая вернувшийся ореол.
+    expect(pixelLengths('0 2px 8px rgba(var(--color-accent-900), 0.25)')).toEqual([2, 8]);
+    expect(pixelLengths('none')).toEqual([]);
+    // ⚠️ Именно ради этой строки альфа ищется перед закрывающей скобкой: шейд
+    // `900` числом прозрачности не является.
+    expect(alphaValues('0 6px 24px rgba(var(--color-accent-900), 0.38)')).toEqual([0.38]);
+    expect(alphaValues('rgb(var(--color-accent-600))')).toEqual([]);
   });
 
   it('разрешающее правило переменных работает на синтетических именах', () => {
     // Самопроверка: сломайся `isAllowedVar` — и запрет ремапящихся шейдов
     // молчал бы на любой выдаче.
     expect(isAllowedVar('--color-on-accent')).toBe(true);
-    expect(isAllowedVar('--color-accent-500')).toBe(true);
+    expect(isAllowedVar('--color-accent-600')).toBe(true);
+    expect(isAllowedVar('--color-accent-800')).toBe(true);
+    expect(isAllowedVar('--color-accent-900')).toBe(true);
     expect(isAllowedVar('--color-warning-200')).toBe(true);
     expect(isAllowedVar('--color-warning-400')).toBe(false);
     expect(isAllowedVar('--color-accent-300')).toBe(false);
+    // ⚠️ #62: пятисотый ремапу не подвержен и прежним правилом проходил — а
+    // кислотность давал именно он.
+    expect(isAllowedVar('--color-accent-500')).toBe(false);
+    expect(isAllowedVar('--color-accent-50')).toBe(false);
     expect(isAllowedVar('--color-critical-500')).toBe(false);
-    expect(themeVars('rgba(var(--color-accent-500), 0.4)')).toEqual(['--color-accent-500']);
+    expect(themeVars('rgba(var(--color-accent-600), 0.4)')).toEqual(['--color-accent-600']);
   });
 
   it('список ремапящихся шейдов сверен с самим globals.css', () => {
@@ -213,25 +268,46 @@ describe('цвет следует акцентной палитре операт
     }
   });
 
-  it('заливка и свечение идут от --color-accent-500', () => {
-    // Спека #61: заливка и свечение — от акцента-500; он в светлой теме не
-    // ремапится (`.light` трогает только 300 и 400), так что тон стабилен.
-    expect(enabled.background).toContain('var(--color-accent-500)');
-    expect(enabled.boxShadow).toContain('var(--color-accent-500)');
-    expect(atLimit.background).toContain('var(--color-accent-500)');
+  it('заливка идёт от глубоких акцентных шейдов — 600 и 800 (#62)', () => {
+    // Решение владельца по #62: тон заливки уходит глубже, 500→700 становится
+    // 600→800. Кнопка остаётся сплошной заливкой и самым громким элементом
+    // страницы — приглушается тон, а не вес.
+    for (const value of [enabled.background, atLimit.background]) {
+      expect(value).toContain('var(--color-accent-600)');
+      expect(value).toContain('var(--color-accent-800)');
+      expect(value).not.toContain('var(--color-accent-500)');
+      expect(value).not.toContain('var(--color-accent-700)');
+    }
+  });
+
+  it('акцентных шейдов светлее шестисотого в выдаче нет ни одного (#62)', () => {
+    // ⚠️ Сердце #62, и правило от обратного: запрещён КЛАСС, а не поле. Мутация
+    // «вернуть `--color-accent-500` в свечение» (или в подложку иконки, или в
+    // дорожку индикатора) краснеет здесь, хотя пятисотый в светлой теме не
+    // ремапится и проверку выше прошёл бы.
+    for (const value of everyValue) {
+      for (const name of themeVars(value)) {
+        const shade = ACCENT_VAR.exec(name)?.[1];
+        if (shade === undefined) continue;
+        expect(`${name}: ${Number(shade) >= MIN_ACCENT_SHADE}`).toBe(`${name}: true`);
+      }
+    }
   });
 
   it('текст и иконка идут от --color-on-accent, а не от белого литерала', () => {
     // ⚠️ `src/hooks/useThemeColors.ts:242-243`: захардкоженный белый ломается,
     // как только оператор выбирает светлый акцент. Цвет «поверх акцента»
     // считается там же из выбранной палитры.
+    //
+    // ⚠️ `indicatorGlow` из списка выбыл по #62: свечение точек снято совсем,
+    // ссылаться ему теперь не на что. Его отсутствие охраняется отдельной
+    // проверкой ниже — иначе оно вернулось бы молча.
     for (const value of [
       enabled.foreground,
       enabled.foregroundMuted,
       enabled.iconBackground,
       enabled.indicatorOn,
       enabled.indicatorOff,
-      enabled.indicatorGlow,
       enabled.indicatorTrack,
     ]) {
       expect(value).toContain('var(--color-on-accent');
@@ -262,9 +338,10 @@ describe('цвет следует акцентной палитре операт
 });
 
 describe('состав акцента в покое сохранён (#59, требование в силе)', () => {
-  it('в покое — заливка градиентом и свечение', () => {
-    // ⚠️ Свечение задано В ПОКОЕ, а не на `:hover`: на телефоне и в Telegram
-    // наведения не существует, и кнопку пролистывали.
+  it('в покое — заливка градиентом и тень', () => {
+    // ⚠️ Тень задана В ПОКОЕ, а не на `:hover`: на телефоне и в Telegram
+    // наведения не существует, и кнопку пролистывали. По #62 она приглушается,
+    // но не исчезает — «none» здесь по-прежнему краснеет.
     expect(enabled.background).toMatch(/^linear-gradient\(/);
     expect(enabled.boxShadow).not.toBe('none');
     expect(enabled.boxShadow.length).toBeGreaterThan(0);
@@ -273,6 +350,34 @@ describe('состав акцента в покое сохранён (#59, тр�
   it('упёрлись в лимит устройств — состояние остаётся отличимым', () => {
     expect(atLimit.boxShadow).toBe('none');
     expect(atLimit.background).not.toBe(enabled.background);
+  });
+});
+
+describe('неона больше нет: ореол и свечение точек сняты (#62)', () => {
+  it('тень короткая и тихая, а не цветной ореол', () => {
+    // ⚠️ Ореол `0 6px 24px rgba(…, 0.38)` и был жалобой владельца: кнопка
+    // светилась в обе стороны и в светлой теме читалась «вырвиглазно». Осталась
+    // мягкая тень глубины — короткая по размытию и негромкая по прозрачности.
+    // Мутация «вернуть 24px» или «вернуть 0.38» краснеет здесь.
+    const lengths = pixelLengths(enabled.boxShadow);
+    expect(lengths.length).toBeGreaterThan(0);
+    expect(Math.max(...lengths)).toBeLessThanOrEqual(10);
+
+    const alphas = alphaValues(enabled.boxShadow);
+    expect(alphas).toHaveLength(1);
+    expect(alphas[0]).toBeLessThanOrEqual(0.3);
+  });
+
+  it('свечение точек индикатора снято в обоих состояниях', () => {
+    // ⚠️ Белые светящиеся точки на акцентной заливке давали ровно тот неон, на
+    // который жалоба. Проверка явная, потому что поле из списка «ссылается на
+    // --color-on-accent» выбыло: без неё свечение вернулось бы молча.
+    expect(enabled.indicatorGlow).toBe('none');
+    expect(atLimit.indicatorGlow).toBe('none');
+  });
+
+  it('подложка иконки стала тише прежних 0.18', () => {
+    expect(alphaValues(enabled.iconBackground)).toEqual([0.14]);
   });
 });
 
