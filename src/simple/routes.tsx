@@ -2,7 +2,9 @@ import type { ComponentType } from 'react';
 import { useUiMode } from '@/store/mode';
 import { SimpleBalance } from './pages/Balance';
 import { SimpleDashboard } from './pages/Dashboard';
+import { SimpleRenewSubscription } from './pages/RenewSubscription';
 import { SimpleSubscription } from './pages/Subscription';
+import { SimpleSubscriptionPurchase } from './pages/SubscriptionPurchase';
 import { SimpleTopUpAmount } from './pages/TopUpAmount';
 import { SimpleTopUpMethodSelect } from './pages/TopUpMethodSelect';
 import { matchSimpleRoute, type SimpleRoute } from './routeMatch';
@@ -52,7 +54,9 @@ export const simpleRoutes: SimpleRoute[] = [
   // список `UPSTREAM_LITERAL_PATHS` в `routeMatch.ts` (дефект #53).
   { path: '/balance/top-up', component: SimpleTopUpMethodSelect },
   { path: '/balance/top-up/:methodId', component: SimpleTopUpAmount },
+  { path: '/subscription/purchase', component: SimpleSubscriptionPurchase },
   { path: '/subscriptions/:subscriptionId', component: SimpleSubscription },
+  { path: '/subscriptions/:subscriptionId/renew', component: SimpleRenewSubscription },
 ];
 
 export function resolveSimpleRoute(pathname: string): SimpleRoute | null {

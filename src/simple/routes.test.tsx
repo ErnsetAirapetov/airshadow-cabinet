@@ -68,7 +68,7 @@ describe('matchSimpleRoute', () => {
 });
 
 describe('состав реестра', () => {
-  it('боевой реестр подменяет главную, баланс, пополнение и карточку подписки', () => {
+  it('боевой реестр подменяет главную, баланс, пополнение, покупку, продление и карточку подписки', () => {
     // Сторож состава. Раньше здесь стояло ожидание пустого реестра — каркас не
     // подменял ничего; первая простая страница (задача #27) его уронила, как и
     // было задумано. Дальше список растёт задачами милстоуна [M1-E05], и каждая
@@ -78,7 +78,9 @@ describe('состав реестра', () => {
       '/balance',
       '/balance/top-up',
       '/balance/top-up/:methodId',
+      '/subscription/purchase',
       '/subscriptions/:subscriptionId',
+      '/subscriptions/:subscriptionId/renew',
     ]);
   });
 
@@ -173,6 +175,27 @@ describe('литеральный маршрут апстрима важнее п
     // Путь с параметром метода в адресе результата — тоже апстримный: он на
     // сегмент длиннее и ни одной записи реестра не достаётся.
     expect(matchSimpleRoute(liveRoutes, '/balance/top-up/result/lava')).toBeNull();
+  });
+
+  it('покупка и продление подменяются, соседи не задеты (задача #29)', () => {
+    // ⚠️ Пара путей задачи #29: литерал `/subscription/purchase` и параметр
+    // `/subscriptions/:subscriptionId/renew`. У обоих в `App.tsx` есть соседи,
+    // на которых легко промахнуться, — отсюда проверка каждой стороны отдельно.
+    expect(matchSimpleRoute(liveRoutes, '/subscription/purchase')?.path).toBe(
+      '/subscription/purchase',
+    );
+    expect(matchSimpleRoute(liveRoutes, '/subscriptions/42/renew')?.path).toBe(
+      '/subscriptions/:subscriptionId/renew',
+    );
+
+    // `/subscription` — апстримный редирект на список, простой версии у него нет.
+    // Совпади литерал покупки по префиксу — человек попадал бы на витрину вместо
+    // своих подписок.
+    expect(matchSimpleRoute(liveRoutes, '/subscription')).toBeNull();
+
+    // Лишний сегмент — уже другой экран, подмены быть не должно.
+    expect(matchSimpleRoute(liveRoutes, '/subscription/purchase/tariff')).toBeNull();
+    expect(matchSimpleRoute(liveRoutes, '/subscriptions/42/renew/confirm')).toBeNull();
   });
 
   it('ни один статический маршрут под швом не отдан чужой записи реестра', () => {
