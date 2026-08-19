@@ -18,5 +18,9 @@
       "expiredLabel": "Expired",
       "disabledLabel": "Disabled"
     }
+  },
+  "support": {
+    "faqLinkTitle": "Frequently asked questions",
+    "faqLinkHint": "Your answer may already be there — check before opening a ticket"
   }
 }

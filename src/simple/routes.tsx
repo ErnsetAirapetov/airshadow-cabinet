@@ -5,6 +5,7 @@ import { SimpleDashboard } from './pages/Dashboard';
 import { SimpleRenewSubscription } from './pages/RenewSubscription';
 import { SimpleSubscription } from './pages/Subscription';
 import { SimpleSubscriptionPurchase } from './pages/SubscriptionPurchase';
+import { SimpleSupport } from './pages/Support';
 import { SimpleTopUpAmount } from './pages/TopUpAmount';
 import { SimpleTopUpMethodSelect } from './pages/TopUpMethodSelect';
 import { matchSimpleRoute, type SimpleRoute } from './routeMatch';
@@ -70,6 +71,12 @@ export const simpleRoutes: SimpleRoute[] = [
   { path: '/subscriptions', component: SimpleSubscription },
   { path: '/subscriptions/:subscriptionId', component: SimpleSubscription },
   { path: '/subscriptions/:subscriptionId/renew', component: SimpleRenewSubscription },
+  // ⚠️ Литеральный путь без соседей: у `/support` в `App.tsx` нет ни дочерних
+  // маршрутов, ни записей-параметров рядом, так что `UPSTREAM_LITERAL_PATHS`
+  // этот адрес не касается. Переход из колокольчика `/support?ticket=<id>` —
+  // тот же путь с хвостом query: в `location.pathname` хвост не входит, и
+  // отдельная запись ему не нужна.
+  { path: '/support', component: SimpleSupport },
 ];
 
 export function resolveSimpleRoute(pathname: string): SimpleRoute | null {
