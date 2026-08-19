@@ -255,7 +255,12 @@ export default function SubscriptionCardActive({
             {timeLeftValue === null ? (
               <span
                 className="text-[15px] font-bold leading-tight tracking-tight transition-colors duration-300"
-                style={{ color: daysLeft <= 3 ? 'rgb(var(--color-warning-400))' : g.text }}
+                // ⚠️ Цвет здесь БЕЗУСЛОВНЫЙ, и это не упрощение, а починка (#58).
+                // Раньше стояло `daysLeft <= 3 ? warning : g.text` — выбор,
+                // который всегда считался в warning: в терминальную ветку
+                // попадают только нулевые (и отрицательные) дни. Мёртвая
+                // развилка читается как настоящая и врёт про правило.
+                style={{ color: 'rgb(var(--color-warning-400))' }}
               >
                 {timeLeftLabel}
               </span>

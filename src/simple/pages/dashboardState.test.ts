@@ -5,15 +5,51 @@ import {
   resolveDashboardSubscription,
   resolveExpiredCardAction,
   resolveRenewHref,
+  resolveSubscriptionPollMs,
   resolveTimeLeftDisplay,
+  SUBSCRIPTION_POLL_MS,
 } from './dashboardState';
 
 /**
  * Вся ветвящаяся логика простой главной живёт в чистом модуле именно ради этих
- * тестов: в репе нет ни jsdom, ни testing-library, компонентных тестов не бывает
- * (vitest.config.ts, `environment: 'node'`). Значит либо логика вынесена и
- * проверена, либо не проверена вовсе.
+ * тестов: страницу и её карточки в тесте не собрать — их граф импортов
+ * дотягивается до alias `@/`, а он в тестах не разрешается. Значит либо логика
+ * вынесена и проверена, либо не проверена вовсе.
  */
+
+/**
+ * Исходник без комментариев — для текстовых сторожей ниже.
+ *
+ * ⚠️ Они читают ТОЛЬКО его, и это несущее требование, а не аккуратность.
+ * Докстринги простой главной и активной карточки сами пересказывают то, что
+ * сторожится: `refetchInterval`, `resolveSubscriptionPollMs`, `SIMPLE_NS`,
+ * `daysLeft`. На сыром тексте закомментированная строка проходила за код — замена
+ * `refetchInterval:` на `// refetchInterval:` в `Dashboard.tsx` оставляла опрос
+ * мёртвым при зелёных тестах, и то же с `import { SIMPLE_NS }` в карточке
+ * (#58, доработка по ревью).
+ *
+ * ⚠️ Строчные комментарии режутся только там, где `//` НЕ стоит после двоеточия:
+ * иначе `https://…` внутри строкового литерала обрезался бы посередине, унося
+ * закрывающую кавычку. Тот же приём, что в `scripts/check-mode-boundaries.mjs`,
+ * `i18nNamespace.test.tsx` и `topUpPage.test.ts`.
+ */
+function code(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
+describe('разбор исходников: сторожа читают код, а не прозу (#58)', () => {
+  it('комментарий с запрещённой конструкцией в код не попадает', () => {
+    expect(code('const a = 1; // refetchInterval: 5\n')).not.toContain('refetchInterval');
+    expect(code('/* useTranslation(SIMPLE_NS) */\nconst a = 1;\n')).not.toContain('SIMPLE_NS');
+  });
+
+  it('но и обратная сторона: код рядом с комментарием остаётся', () => {
+    // Сторож, вырезающий вместе с прозой сам код, был бы зелёным всегда.
+    expect(code('const a = 1; // прочее\n')).toContain('const a = 1;');
+    // И `//` внутри URL не комментарий: иначе разбор скобок разъезжался бы.
+    expect(code("const u = 'https://t.me/x';\n")).toContain('https://t.me/x');
+  });
+});
 
 function status(overrides: Partial<Subscription> = {}): Subscription {
   return {
@@ -204,10 +240,30 @@ describe('resolveTimeLeftDisplay', () => {
     ).toEqual({ kind: 'underMinute' });
   });
 
+  it('частично отрицательный остаток — берётся живая единица, а не терминальная строка', () => {
+    // ⚠️ Спуск идёт по ПОЛОЖИТЕЛЬНЫМ единицам, а не по первой встреченной:
+    // рассинхрон часов легко даёт `hours_left: -1` при живых 30 минутах. Условие
+    // «ни одной положительной единицы» это переживает, а «первая неположительная
+    // — терминальная» показало бы «Меньше минуты» подписке, которой полчаса.
+    // Поведение описано в докстринге функции и до #58 не было приколочено.
+    expect(resolveTimeLeftDisplay(sub({ days_left: 0, hours_left: -1, minutes_left: 30 }))).toEqual(
+      {
+        kind: 'unit',
+        value: 30,
+        unit: 'minutes',
+      },
+    );
+  });
+
   it('истёкшая подписка ведёт себя как раньше — 0 минут, у неё своя карточка', () => {
+    // ⚠️ Ветка НЕДОСТИЖИМА из единственного вызова (#58): истёкшую подписку до
+    // плитки не пускает роутинг карточек в `Dashboard.tsx` — ей достаётся
+    // `SubscriptionCardExpired`, где плитки остатка нет вообще. Проверка
+    // оставлена осознанно: это оборона чистой функции от будущего потребителя,
+    // а не описание живого экрана. Тот же смысл у теста ниже.
+    //
     // Терминальная формулировка обещает «ещё чуть-чуть работает», поэтому
-    // истёкшей она не достаётся. На главной такая подписка попадает в
-    // SubscriptionCardExpired, где плитки остатка нет вообще.
+    // истёкшей она не достаётся.
     expect(
       resolveTimeLeftDisplay(
         sub({
@@ -228,6 +284,126 @@ describe('resolveTimeLeftDisplay', () => {
         sub({ status: 'disabled', is_active: false, days_left: 0, hours_left: 0, minutes_left: 0 }),
       ),
     ).toEqual({ kind: 'unit', value: 0, unit: 'minutes' });
+  });
+});
+
+describe('resolveSubscriptionPollMs — остаток не залипает на открытой вкладке (#58)', () => {
+  const sub = status;
+  const poll = (overrides: Partial<Subscription> = {}) =>
+    resolveSubscriptionPollMs(response(sub(overrides)));
+
+  it('дни в запасе — редкий шаг, чтобы вкладка доехала до нижних ступеней', () => {
+    // ⚠️ Не `false`. Возврат фокуса на вкладку не обновляет ничего
+    // (`refetchOnWindowFocus` выключен глобально), а `refetchOnMount: 'always'`
+    // ждёт нового монтажа — без дневного шага вкладка, открытая больше суток,
+    // показывала бы «1 дн.» и после фактического истечения.
+    expect(poll({ days_left: 18 })).toBe(SUBSCRIPTION_POLL_MS.days);
+    expect(poll({ days_left: 1 })).toBe(SUBSCRIPTION_POLL_MS.days);
+  });
+
+  it('последние сутки — редкий опрос, чтобы попасть в минуты', () => {
+    expect(poll({ days_left: 0, hours_left: 8, minutes_left: 40 })).toBe(
+      SUBSCRIPTION_POLL_MS.hours,
+    );
+  });
+
+  it('последний час — опрос под шаг цифры', () => {
+    expect(poll({ days_left: 0, hours_left: 0, minutes_left: 45 })).toBe(
+      SUBSCRIPTION_POLL_MS.minutes,
+    );
+  });
+
+  it('терминальная формулировка при нулях — самый частый опрос', () => {
+    // ⚠️ Ровно тот дефект, из-за которого функция появилась: «Меньше минуты»
+    // корректна в момент отрисовки и лжёт через минуту, а без опроса висит до
+    // перезагрузки вкладки. Нули означают, что развязка будет в пределах минуты.
+    expect(poll({ days_left: 0, hours_left: 0, minutes_left: 0 })).toBe(
+      SUBSCRIPTION_POLL_MS.underMinute,
+    );
+  });
+
+  it('отрицательный остаток — минутный шаг, а не пятнадцатисекундный', () => {
+    // ⚠️ Развязки может не быть вообще: при рассинхроне часов или отставшем
+    // джобе бэкенд не перевернёт `is_expired`, подписка останется `active`, и
+    // самый частый шаг долбил бы сервер, пока открыта вкладка. Торопиться тут
+    // некуда — подписка по-прежнему считается живой.
+    expect(poll({ days_left: -1, hours_left: -2, minutes_left: -30 })).toBe(
+      SUBSCRIPTION_POLL_MS.minutes,
+    );
+    // Хватает одной отрицательной единицы: остальные могут быть нулями.
+    expect(poll({ days_left: 0, hours_left: 0, minutes_left: -1 })).toBe(
+      SUBSCRIPTION_POLL_MS.minutes,
+    );
+  });
+
+  it('интервалы идут по возрастанию частоты, а не как попало', () => {
+    expect(SUBSCRIPTION_POLL_MS.underMinute).toBeLessThan(SUBSCRIPTION_POLL_MS.minutes);
+    expect(SUBSCRIPTION_POLL_MS.minutes).toBeLessThan(SUBSCRIPTION_POLL_MS.hours);
+    expect(SUBSCRIPTION_POLL_MS.hours).toBeLessThan(SUBSCRIPTION_POLL_MS.days);
+    // ⚠️ Шаг не крупнее единицы, которая стоит на плитке, — иначе цифра
+    // отстаёт на целую единицу. Сторожится ОБЕ ступени, где единица есть:
+    // раньше пара была только у минут, и `hours` можно было поднять до двух
+    // часов при зелёных тестах, нарушив заявленное в докстринге правило.
+    expect(SUBSCRIPTION_POLL_MS.minutes).toBeLessThanOrEqual(60_000);
+    expect(SUBSCRIPTION_POLL_MS.hours).toBeLessThanOrEqual(3_600_000);
+  });
+
+  it('истёкшая и отключённая — догонять нечего', () => {
+    // У них своя карточка, плитки остатка там нет вообще.
+    expect(poll({ status: 'expired', is_active: false, is_expired: true, days_left: 0 })).toBe(
+      false,
+    );
+    expect(poll({ status: 'disabled', is_active: false, days_left: 0 })).toBe(false);
+  });
+
+  it('приостановленная (limited) — не поллим: остаток там ни при чём', () => {
+    expect(poll({ status: 'limited', is_active: false, is_limited: true, days_left: 0 })).toBe(
+      false,
+    );
+  });
+
+  it('ответа ещё нет и подписки нет — поллить нечего', () => {
+    expect(resolveSubscriptionPollMs(undefined)).toBe(false);
+    expect(resolveSubscriptionPollMs(response(null))).toBe(false);
+  });
+});
+
+/**
+ * Сторож подключения: правило опроса обязано стоять в запросе подписки (#58).
+ *
+ * Чистая функция без вызова — мёртвый код: остаток продолжал бы залипать при
+ * зелёных тестах на саму функцию. Файл читается ТЕКСТОМ (см. канон, «Тесты») и
+ * БЕЗ КОММЕНТАРИЕВ: докстринг запроса в `Dashboard.tsx` сам пересказывает правило
+ * опроса и называет `refetchInterval` с `resolveSubscriptionPollMs`, поэтому на
+ * сыром тексте замена строки на `// refetchInterval: …` оставляла все тесты
+ * зелёными, а поллинг мёртвым. Это единственная правка задачи, меняющая поведение
+ * в проде, — и сторож обязан краснеть на ней сам, а не полагаться на `tsc`, который
+ * поймает мутацию лишь по осиротевшему импорту.
+ */
+describe('опрос подписки подключён к запросу главной (#58)', () => {
+  const page = code(readFileSync('src/simple/pages/Dashboard.tsx', 'utf8'));
+
+  it('разбор удался — иначе сторож сверял бы пустоту', () => {
+    // Пара к вырезанию комментариев: код запроса на месте, а не выгрызен вместе
+    // с прозой — иначе проверки ниже искали бы литералы в пустоте.
+    expect(page).toContain("queryKey: ['subscription']");
+    expect(page).toContain('useQuery({');
+  });
+
+  it('интервал опроса считает наша функция, а не литерал в странице', () => {
+    expect(page).toContain('resolveSubscriptionPollMs');
+    expect(page).toMatch(/refetchInterval:\s*\(query\)\s*=>\s*resolveSubscriptionPollMs\(/);
+  });
+
+  it('опрос стоит именно у запроса подписки, а не у соседнего', () => {
+    // Между ключом запроса и `refetchInterval` не должно быть другого useQuery:
+    // иначе поллился бы, например, баланс, а плитка осталась бы залипшей.
+    const fromKey = page.slice(page.indexOf("queryKey: ['subscription']"));
+    const interval = fromKey.indexOf('refetchInterval');
+    const nextQuery = fromKey.indexOf('useQuery({');
+
+    expect(interval).toBeGreaterThan(-1);
+    expect(nextQuery === -1 || interval < nextQuery).toBe(true);
   });
 });
 
@@ -292,18 +468,28 @@ describe('resolveRenewHref', () => {
  * Чистая функция отдаёт `{ kind: 'underMinute' }` без значения, и `timeLeft.value`
  * на объединении не компилируется — но `timeLeft.kind === 'unit' ? timeLeft.value : 0`
  * компилируется прекрасно, и дефект вернулся бы со зелёной сборкой. Плитку самой
- * карточки проверить нечем: компонентных тестов в репе не бывает
- * (`vitest.config.ts`, `environment: 'node'`), поэтому файл читается ТЕКСТОМ —
- * тем же приёмом, что сторожа шапки и страницы баланса.
+ * карточки рендером не достать — она тянет `@/hooks` и `@/utils`, а alias `@/` в
+ * тестах не разрешается, поэтому файл читается ТЕКСТОМ — тем же приёмом, что
+ * сторожа шапки и страницы баланса.
  */
 describe('плитка остатка не печатает цифру в терминальной ветке (#50)', () => {
-  const card = readFileSync('src/simple/components/dashboard/SubscriptionCardActive.tsx', 'utf8');
+  /**
+   * ⚠️ Карточка читается БЕЗ КОММЕНТАРИЕВ целиком, а не в одном тесте (#58).
+   * Её докстринги и пояснения внутри веток сами называют `SIMPLE_NS`, `tSimple` и
+   * `daysLeft`: на сыром тексте `// import { SIMPLE_NS } …` проходил за живой
+   * импорт, а запрет `daysLeft` краснел бы по собственной прозе.
+   */
+  const card = code(
+    readFileSync('src/simple/components/dashboard/SubscriptionCardActive.tsx', 'utf8'),
+  );
   const ru = JSON.parse(readFileSync('src/simple/locales/ru.json', 'utf8')) as {
     dashboard: Record<string, string>;
   };
 
   it('разбор удался — иначе сторож сверял бы пустоту', () => {
     expect(card).toContain('resolveTimeLeftDisplay(subscription)');
+    // Пара к вырезанию комментариев: разметка плитки на месте, а не выгрызена.
+    expect(card).toContain('{timeLeftLabel}');
   });
 
   it('в терминальной ветке цифры нет вообще', () => {
@@ -312,6 +498,32 @@ describe('плитка остатка не печатает цифру в тер
 
   it('вместо цифры — наша строка из неймспейса простого режима', () => {
     expect(card).toContain("tSimple('dashboard.timeLeftUnderMinute')");
+
+    // ⚠️ И `tSimple` привязан к НАШЕМУ неймспейсу (#58). Без этой пары строк
+    // подмена `useTranslation(SIMPLE_NS)` на `useTranslation()` оставляла все
+    // сторожа зелёными, а на плитке печатался сырой ключ
+    // `dashboard.timeLeftUnderMinute`. Проверка по всему слою и доказательство
+    // отрисовкой — в `src/simple/i18nNamespace.test.tsx`.
+    expect(card).toContain("import { SIMPLE_NS } from '../../i18n'");
+    expect(card).toContain('const { t: tSimple } = useTranslation(SIMPLE_NS)');
+  });
+
+  it('цвет терминальной строки безусловный — мёртвой развилки нет (#58)', () => {
+    // В терминальную ветку попадают только нулевые и отрицательные дни, поэтому
+    // `daysLeft <= 3 ? warning : ...` там всегда считался в warning. Выбор,
+    // который не выбирает, читается как правило и врёт о нём.
+    // ⚠️ Разбор по коду БЕЗ КОММЕНТАРИЕВ (это он же — `card` выше): объяснение
+    // починки стоит прямо в этой ветке и само называет `daysLeft`, на сыром тексте
+    // сторож падал бы по прозе.
+    const terminal = card.slice(
+      card.indexOf('timeLeftValue === null ?'),
+      card.indexOf('{timeLeftLabel}'),
+    );
+
+    // Разбор удался: ветка найдена и непустая.
+    expect(terminal.length).toBeGreaterThan(100);
+    expect(terminal).toContain("color: 'rgb(var(--color-warning-400))'");
+    expect(terminal).not.toContain('daysLeft');
   });
 
   it('строка, которую печатает карточка, в локали есть', () => {

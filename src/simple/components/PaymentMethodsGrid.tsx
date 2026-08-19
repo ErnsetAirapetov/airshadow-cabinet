@@ -3,8 +3,8 @@ import { useNavigate } from 'react-router';
 
 import { useCurrency } from '@/hooks/useCurrency';
 import type { PaymentMethod } from '@/types';
-import { resolveAccentedMethodId, topUpHref } from '../pages/balanceState';
 import { resolveMethodCardSpans, spanClasses } from './paymentMethodsBento';
+import { resolveAccentedMethodId, topUpHref } from './paymentMethodsState';
 
 /**
  * Блок карточек способов пополнения — один компонент на два экрана (задача #55).
@@ -52,7 +52,7 @@ export function PaymentMethodsGrid({ methods, search = '' }: PaymentMethodsGridP
   // ⚠️ Акцент — буквально первой карточке списка, независимо от доступности
   // (решение владельца 17.08.2026, #52). Решает чистая функция, а не условие в
   // разметке: её ветки (пусто / данных нет / все недоступны / недоступный первым)
-  // покрыты `balanceState.test.ts`.
+  // покрыты `paymentMethodsState.test.ts` — там же, где лежит сама функция (#58).
   const accentedMethodId = resolveAccentedMethodId(methods);
   const spans = resolveMethodCardSpans(methods.length);
 

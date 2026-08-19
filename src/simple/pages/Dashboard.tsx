@@ -16,7 +16,7 @@ import SubscriptionCardActive from '../components/dashboard/SubscriptionCardActi
 import SubscriptionCardExpired from '../components/dashboard/SubscriptionCardExpired';
 import TrialOfferCard from '../components/dashboard/TrialOfferCard';
 import { SIMPLE_NS } from '../i18n';
-import { resolveDashboardSubscription } from './dashboardState';
+import { resolveDashboardSubscription, resolveSubscriptionPollMs } from './dashboardState';
 
 /**
  * Главная простого режима.
@@ -71,6 +71,14 @@ export function SimpleDashboard() {
     retry: false,
     staleTime: API.BALANCE_STALE_TIME_MS,
     refetchOnMount: 'always',
+    // ⚠️ Остаток на плитке считается только из полей ответа, а `staleTime` плюс
+    // глобально выключенный `refetchOnWindowFocus` держали снапшот до
+    // перезагрузки вкладки: корректное «Меньше минуты» (#50) через минуту
+    // становилось ложью и висело часами (#58). Шаг опроса зависит от ступени
+    // остатка — правило целиком в `resolveSubscriptionPollMs`, здесь только
+    // вызов. Читаем данные запроса, а не `state` ниже: `refetchInterval`
+    // вычисляется до того, как состояние собрано.
+    refetchInterval: (query) => resolveSubscriptionPollMs(query.state.data),
   });
 
   const state = resolveDashboardSubscription({

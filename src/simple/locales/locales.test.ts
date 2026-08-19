@@ -116,7 +116,38 @@ const appLanguages = [...APP_I18N.matchAll(/^\s*(\w+): \(\) => import\('\.\/loca
   (found) => found[1],
 );
 
-/** Инстанс i18next с нашим неймспейсом и языком `lng`. */
+/**
+ * Наши локали, разобранные по коду `src/simple/i18n.ts`, а не по константе (#58).
+ *
+ * ⚠️ Так и только так. Прежняя версия сторожа регистрировала бандлы `ru` и `en`
+ * СВОИМ списком, и удаление строки `addResourceBundle('en', …)` из
+ * `src/simple/i18n.ts` не роняло ничего: тест продолжал собирать инстанс из двух
+ * бандлов и проверять резолв на выдуманном конфиге, пока приложение печатало
+ * англоязычному пользователю сырые ключи. Проверка `toContain('addResourceBundle')`
+ * такую мутацию тоже переживала — вторая строка остаётся на месте.
+ *
+ * Разбор идёт по коду БЕЗ КОММЕНТАРИЕВ: докстринг `src/simple/i18n.ts` сам
+ * рассказывает про регистрацию бандлов, и на сыром тексте регулярка ловила бы прозу.
+ */
+const SIMPLE_I18N_CODE = SIMPLE_I18N.replace(/\/\*[\s\S]*?\*\//g, '').replace(
+  /(^|[^:])\/\/[^\n]*/g,
+  '$1',
+);
+
+/** Языки, БАНДЛЫ КОТОРЫХ РЕАЛЬНО РЕГИСТРИРУЮТСЯ в `src/simple/i18n.ts`. */
+const registeredLngs = [...SIMPLE_I18N_CODE.matchAll(/addResourceBundle\('(\w+)'/g)].map(
+  (found) => found[1],
+);
+
+/** Наши json-локали по коду языка — источник для сборки тестового инстанса. */
+const OUR_BUNDLES: Record<string, unknown> = { ru, en };
+
+/**
+ * Инстанс i18next с нашим неймспейсом и языком `lng`.
+ *
+ * Бандлы навешиваются по `registeredLngs`, то есть по СОСТАВУ ИЗ ИСХОДНИКА:
+ * инстанс теста обязан знать ровно те языки, что знает приложение.
+ */
 function instanceFor(lng: string) {
   const instance = createInstance();
   instance.init({
@@ -126,8 +157,9 @@ function instanceFor(lng: string) {
     initImmediate: false,
     interpolation: { escapeValue: false },
   });
-  instance.addResourceBundle('ru', simpleNs, ru, true, true);
-  instance.addResourceBundle('en', simpleNs, en, true, true);
+  for (const registered of registeredLngs) {
+    instance.addResourceBundle(registered, simpleNs, OUR_BUNDLES[registered], true, true);
+  }
   return instance;
 }
 
@@ -139,6 +171,18 @@ describe('языки без нашей локали не показывают с
     expect(simpleNs).toBe('simple');
     expect([...appLanguages].sort()).toEqual(['en', 'fa', 'ru', 'zh']);
 
+    // ⚠️ И состав НАШИХ бандлов — вычитанный из `src/simple/i18n.ts`, а не
+    // объявленный здесь (#58). Удаление любой строки `addResourceBundle`
+    // выводит на экран сырые ключи; раньше эту мутацию переживал весь файл.
+    expect(
+      [...registeredLngs].sort(),
+      'состав `addResourceBundle` в src/simple/i18n.ts разошёлся с решением владельца ' +
+        '«наши строки — только русский и английский» (docs/architecture/two-modes.md, «Локали»)',
+    ).toEqual(['en', 'ru']);
+    // Каждому зарегистрированному языку есть что зарегистрировать: язык,
+    // добавленный в `i18n.ts` без json-локали рядом, здесь обязан краснеть.
+    expect(registeredLngs.filter((lng) => OUR_BUNDLES[lng] === undefined)).toEqual([]);
+
     // ⚠️ И то, что константы реально подключены к `init`. Без этой пары тест
     // читал бы объявление, а приложение жило бы по другому конфигу: замена
     // `fallbackLng: FALLBACK_LNG` на `fallbackLng: false` вернула бы персу
@@ -149,14 +193,43 @@ describe('языки без нашей локали не показывают с
   });
 
   it('своего fallbackLng у неймспейса нет — иначе обещание держится не на том', () => {
-    // ⚠️ Разбор по коду БЕЗ КОММЕНТАРИЕВ: докстринг `src/simple/i18n.ts` сам
-    // объясняет, что своего `fallbackLng` там нет и почему, — на сыром тексте
-    // проверка падала бы по этой прозе, то есть по ложной причине.
-    const code = SIMPLE_I18N.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
-
+    // ⚠️ Разбор по `SIMPLE_I18N_CODE`, то есть по коду БЕЗ КОММЕНТАРИЕВ: докстринг
+    // `src/simple/i18n.ts` сам объясняет, что своего `fallbackLng` там нет и
+    // почему, — на сыром тексте проверка падала бы по этой прозе, то есть по
+    // ложной причине.
     // Разбор удался: код неймспейса на месте, а не выгрызен вместе с прозой.
-    expect(code).toContain('addResourceBundle');
-    expect(code).not.toContain('fallbackLng');
+    expect(SIMPLE_I18N_CODE).toContain('addResourceBundle');
+    expect(SIMPLE_I18N_CODE).not.toContain('fallbackLng');
+  });
+
+  it('регистрация проведена при ЛЮБОМ порядке импортов — обе ветки на месте (#58)', () => {
+    // ⚠️ Второе несущее место после самих `addResourceBundle` (первое — выше).
+    // `register()` зовётся из развилки по `i18n.isInitialized`, и несущи ОБЕ её
+    // ветки, потому что порядок импортов между `src/i18n.ts` и нашим файлом не
+    // гарантирован — так говорит докстринг самой развилки:
+    //   • нет вызова в ветке `isInitialized` — сырые ключи получит уже поднятый
+    //     инстанс: событие `initialized` для него больше не выстрелит;
+    //   • нет подписки в `else` — сырые ключи получит ещё не поднятый.
+    // Удаление `else`-ветки не роняло ни `npm test`, ни `tsc`: сторожа резолва
+    // выше собирают СВОЙ инстанс и навешивают бандлы сами, то есть проводки не
+    // видят вовсе. Разбор — по коду без комментариев, иначе за неё прошёл бы
+    // докстринг.
+
+    // Разбор удался: развилка найдена, функция регистрации объявлена.
+    expect(SIMPLE_I18N_CODE).toContain('function register()');
+    expect(SIMPLE_I18N_CODE).toContain('i18n.isInitialized');
+
+    expect(
+      SIMPLE_I18N_CODE,
+      'в ветке `i18n.isInitialized` нет вызова `register()` — уже поднятый инстанс ' +
+        'останется без наших бандлов, событие `initialized` для него не выстрелит',
+    ).toMatch(/if \(i18n\.isInitialized\)\s*\{?\s*register\(\)/);
+
+    expect(
+      SIMPLE_I18N_CODE,
+      "нет подписки `i18n.on('initialized', register)` — при импорте до подъёма " +
+        'инстанса бандлы не зарегистрируются вообще, и оба языка получат сырые ключи',
+    ).toMatch(/i18n\.on\(\s*'initialized',\s*register\s*\)/);
   });
 
   it('каждый ключ на каждом языке аккаунта резолвится в текст, а не в имя ключа', () => {

@@ -5,12 +5,11 @@ import { FALLBACK_QUICK_AMOUNTS_RUBLES, resolveQuickAmountsLayout } from './topU
 /**
  * Сторожа простого экрана суммы пополнения (задача #53).
  *
- * ⚠️ Файлы читаются ТЕКСТОМ, а не импортируются. Компонентных тестов в проекте не
- * бывает: `vitest.config.ts` задаёт `environment: 'node'`, jsdom и
- * testing-library в репе нет, а alias `@/` в тестах не разрешается — импорт
- * страницы потянул бы весь граф приложения и упал бы на разрешении модулей. Тот
- * же приём, что в `balancePage.test.ts`; цена та же — разбор видит только то, что
- * записано литералом, поэтому у каждого блока ниже есть парная проверка «разбор
+ * ⚠️ Файлы читаются ТЕКСТОМ, а не импортируются, потому что alias `@/` в тестах
+ * не разрешается: страница тянет `@/api`, `@/hooks` и `@/platform`, и импорт упал
+ * бы на разрешении модулей. Граница именно в alias, а не в отсутствии jsdom —
+ * см. канон, «Тесты». Тот же приём, что в `balancePage.test.ts`; цена та же —
+ * разбор видит только то, что записано литералом, поэтому у каждого блока ниже есть парная проверка «разбор
  * удался».
  *
  * Зачем эти сторожа поверх `topUpState.test.ts`: тот проверяет чистые функции, но
@@ -337,6 +336,29 @@ describe('страница зовёт свои же чистые функции 
     expect(page).toContain("queryKey: ['purchase-options', undefined]");
     expect(page).toContain('subscriptionApi.getPurchaseOptions()');
     expect(callArgs(page, 'resolveSubscriptionAmounts')).toContain('(purchaseOptions)');
+  });
+
+  it('хвост редиректа собирает resolveTopUpSearch, а не страница руками (#58)', () => {
+    // ⚠️ Одно правило — один источник. Правило «переносим `amount` и `returnTo`,
+    // остальное нет» живёт в `resolveTopUpSearch` (задача #55) и покрыто тестами
+    // со всеми краями — пустой хвост, экранирование, посторонние параметры.
+    // Страница собирала тот же хвост своими `URLSearchParams`, и два источника
+    // истины разошлись бы молча: поправили бы правило в одном месте.
+    expect(page).toContain("import { resolveTopUpSearch } from './topUpMethodSelectState'");
+    expect(page).toContain(
+      'navigate(`/balance/top-up${resolveTopUpSearch(searchParams)}`, { replace: true })',
+    );
+
+    // И руками хвост больше не собирается — проверяем ВНУТРИ эффекта редиректа,
+    // а не по всей странице: запрет `new URLSearchParams()` на весь файл краснел
+    // бы на любом будущем законном использовании, то есть по ложной причине.
+    const effect = page.slice(page.indexOf('if (methods && !method)'));
+    const redirect = effect.slice(0, effect.indexOf('}, [methods, method'));
+
+    // Разбор удался: эффект найден и непустой.
+    expect(redirect.length).toBeGreaterThan(30);
+    expect(redirect).not.toContain('URLSearchParams');
+    expect(redirect).not.toContain("searchParams.get('amount')");
   });
 });
 
