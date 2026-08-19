@@ -19,7 +19,6 @@ import TicketNotificationBell from '@/components/TicketNotificationBell';
 import {
   CloseIcon,
   CogIcon,
-  InfoIcon,
   LogoutIcon,
   MenuIcon,
   MoonIcon,
@@ -34,6 +33,8 @@ import { useAuthStore } from '@/store/auth';
 import { displayName } from '@/utils/displayName';
 import { SIMPLE_NS } from '../../i18n';
 import { useModeStore } from '@/store/mode';
+import { SIMPLE_NAV_ICONS } from './navIcons';
+import { isSimpleNavActive, SIMPLE_NAV_ITEMS } from './navItems';
 
 const FALLBACK_NAME = import.meta.env.VITE_APP_NAME || 'Cabinet';
 const FALLBACK_LOGO = import.meta.env.VITE_APP_LOGO || 'V';
@@ -52,9 +53,15 @@ interface SimpleHeaderProps {
  * Копия апстримного `src/components/layout/AppShell/AppHeader.tsx` — мобильная
  * шапка простого режима.
  *
- * Что выброшено относительно апстрима: поиск. Из ящика убраны пункты, которые
- * уже стоят в нижнем меню (главная, подписка, баланс, поддержка): дублировать
- * четыре кнопки, видимые на том же экране, незачем.
+ * Что выброшено относительно апстрима: поиск.
+ *
+ * Состав ящика — **весь** общий список `navItems.ts`, тот же и в том же порядке,
+ * что в десктопном меню (#66). Четыре пункта из шести стоят ещё и в нижнем меню
+ * на том же экране, и это дублирование — прямое слово владельца от 19.08.2026:
+ * «что в меню на десктопе, то и в мобилке доступно для перехода. То что это
+ * дублируется в меню снизу — неважно». Раньше здесь было два пункта из шести с
+ * объяснением «остальное не дублируем» — именно это расхождение владелец и
+ * увидел на стенде.
  *
  * Тумблер темы, колокольчик и переключатель языка (#43, #47) в апстриме живут в
  * верхней строке шапки рядом с кнопкой меню; здесь — в ящике, рядом с блоком
@@ -153,7 +160,6 @@ export function SimpleHeader({
     };
   }, [mobileMenuOpen]);
 
-  const isActive = (path: string) => location.pathname.startsWith(path);
   const isAdminActive = () => location.pathname.startsWith('/admin');
 
   return (
@@ -310,29 +316,39 @@ export function SimpleHeader({
               </div>
 
               {/*
-                Главная, подписка, баланс и поддержка сюда не дублируются — они
-                стоят в нижнем меню, видимом на том же экране.
+                Бургер даёт ТЕ ЖЕ пункты, что десктопное меню, — весь общий
+                список `navItems.ts` целиком, включая четыре, которые стоят ещё и
+                в нижнем меню. Дублирование осознанное: решение владельца от
+                19.08.2026 дословно — «что в меню на десктопе, то и в мобилке
+                доступно для перехода. То что это дублируется в меню снизу —
+                неважно» (#66).
+
+                До этого здесь стояли только профиль и информация с объяснением
+                «остальное не дублируем, оно в нижнем меню» — и ровно это
+                расхождение десктопа с мобилкой владелец увидел на стенде.
+                Отсекать пункты фильтром нельзя: перечень один, и он общий.
+
+                Юридические документы живут внутри «Информации», поэтому её
+                пункт обязан оставаться достижимым — он в общем списке.
               */}
               <nav className="space-y-1">
-                <Link
-                  to="/profile"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={isActive('/profile') ? 'nav-item-active' : 'nav-item'}
-                >
-                  <UserIcon className="h-5 w-5" />
-                  {t('nav.profile')}
-                </Link>
+                {SIMPLE_NAV_ITEMS.map((item) => {
+                  const Icon = SIMPLE_NAV_ICONS[item.path];
+                  const active = isSimpleNavActive(location.pathname, item.path);
 
-                {/* Юридические документы живут внутри «Информации» — пункт
-                    обязан оставаться достижимым. */}
-                <Link
-                  to="/info"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={isActive('/info') ? 'nav-item-active' : 'nav-item'}
-                >
-                  <InfoIcon className="h-5 w-5" />
-                  {t('nav.info')}
-                </Link>
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setMobileMenuOpen(false)}
+                      aria-current={active ? 'page' : undefined}
+                      className={active ? 'nav-item-active' : 'nav-item'}
+                    >
+                      <Icon className="h-5 w-5" />
+                      {t(item.labelKey)}
+                    </Link>
+                  );
+                })}
 
                 {isAdmin && (
                   <>

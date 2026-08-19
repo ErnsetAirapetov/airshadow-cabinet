@@ -14,18 +14,7 @@ import SuccessNotificationModal from '@/components/SuccessNotificationModal';
 import TicketNotificationBell from '@/components/TicketNotificationBell';
 import WebSocketNotifications from '@/components/WebSocketNotifications';
 import { useBackgroundConsumer } from '@/components/backgrounds/BackgroundHost';
-import {
-  CreditCardIcon,
-  HomeIcon,
-  InfoIcon,
-  LogoutIcon,
-  MoonIcon,
-  ShieldIcon,
-  SubscriptionIcon,
-  SunIcon,
-  SupportIcon,
-  UserIcon,
-} from '@/components/icons';
+import { LogoutIcon, MoonIcon, ShieldIcon, SunIcon } from '@/components/icons';
 import { useBranding } from '@/hooks/useBranding';
 import { useHeaderHeight } from '@/hooks/useHeaderHeight';
 import { useScrollRestoration } from '@/hooks/useScrollRestoration';
@@ -38,6 +27,8 @@ import { useModeStore } from '@/store/mode';
 import { SIMPLE_NS } from '../../i18n';
 import { MobileBottomNav } from './MobileBottomNav';
 import { SimpleHeader } from './SimpleHeader';
+import { SIMPLE_NAV_ICONS } from './navIcons';
+import { isSimpleNavActive, SIMPLE_NAV_ITEMS } from './navItems';
 
 /**
  * Оболочка простого режима — копия апстримного
@@ -67,7 +58,9 @@ import { SimpleHeader } from './SimpleHeader';
  * отказывается переключаться, и кнопка выглядит сломанной.
  *
  * Состав панели — требование владельца: только разрешённые в простом режиме
- * пункты плюс админка администратору.
+ * пункты плюс админка администратору. Сам перечень живёт в `navItems.ts` и
+ * читается всеми тремя местами навигации (#66): до этого он был записан трижды,
+ * и два из трёх перечней разъехались молча.
  */
 export function SimpleShell({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -138,21 +131,6 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // Разрешённые в простом режиме пункты — без фича-флагов и без вариантов.
-  const desktopNav = [
-    { path: '/', label: t('nav.dashboard'), icon: HomeIcon },
-    { path: '/subscriptions', label: t('nav.subscription'), icon: SubscriptionIcon },
-    { path: '/balance', label: t('nav.balance'), icon: CreditCardIcon },
-    { path: '/support', label: t('nav.support'), icon: SupportIcon },
-    { path: '/profile', label: t('nav.profile'), icon: UserIcon },
-    { path: '/info', label: t('nav.info'), icon: InfoIcon },
-  ];
-
-  const isActive = (path: string) => {
-    if (path === '/') return location.pathname === '/';
-    return location.pathname.startsWith(path);
-  };
-
   const handleNavClick = () => {
     haptic.impact('light');
   };
@@ -163,7 +141,9 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
     Icon: React.ComponentType<{ className?: string }>,
     admin = false,
   ) => {
-    const active = admin ? location.pathname.startsWith('/admin') : isActive(path);
+    const active = admin
+      ? location.pathname.startsWith('/admin')
+      : isSimpleNavActive(location.pathname, path);
     return (
       <Link
         key={path}
@@ -242,9 +222,15 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
           </Link>
 
           {/* Навигация единой «капсулой»: все пункты видны всегда, без скролла
-              и сворачивания. Центрируется средней колонкой grid. */}
+              и сворачивания. Центрируется средней колонкой grid.
+
+              Состав берётся из общего списка `navItems.ts` — того же, что читают
+              бургер и нижнее меню (#66). Своего перечня здесь больше нет: три
+              копии состава разъехались молча, при зелёной сборке. */}
           <nav className="flex items-center gap-0.5 justify-self-center rounded-full border border-dark-800/70 bg-dark-900/50 p-1 shadow-sm backdrop-blur-sm">
-            {desktopNav.map((item) => renderNavLink(item.path, item.label, item.icon))}
+            {SIMPLE_NAV_ITEMS.map((item) =>
+              renderNavLink(item.path, t(item.labelKey), SIMPLE_NAV_ICONS[item.path]),
+            )}
             {isAdmin && (
               <>
                 <div className="mx-1 h-5 w-px shrink-0 bg-dark-700/60" />
