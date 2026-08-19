@@ -422,7 +422,10 @@ describe('пункты 5 и 6: порядок блоков карточки (#59
   const ORDER: [string, string][] = [
     ['трафик', '<TrafficProgressBar'],
     ['подключить устройство', '<ConnectDeviceButton'],
-    ['продлить подписку', '<PurchaseCTAButton subscription={subscription} />'],
+    // Блок истёкшей подписки занимает место пары «подключить + продлить»: в этом
+    // состоянии ни того, ни другого на экране нет (#65).
+    ['действие истёкшей', '<ExpiredSubscriptionAction'],
+    ['продлить подписку', '<PurchaseCTAButton subscription={subscription}'],
     ['ссылка', 'displayedConnectionUrl && !shouldHideConnectionLink'],
     ['счётчик и автопродление', 'resolveSubscriptionInfoRowLayout('],
     ['пакеты трафика', 'subscription.traffic_purchases &&'],
@@ -453,7 +456,7 @@ describe('пункты 5 и 6: порядок блоков карточки (#59
   it('кнопка продления стоит внутри карточки, а не под ней', () => {
     // Раньше `PurchaseCTAButton` жил снаружи, после всей карточки.
     const card = at(code, 'const usedGb = trafficData?.traffic_used_gb');
-    const cta = at(code, '<PurchaseCTAButton subscription={subscription} />');
+    const cta = at(code, '<PurchaseCTAButton subscription={subscription}');
 
     expect(card).toBeGreaterThan(-1);
     expect(cta).toBeGreaterThan(card);
@@ -464,6 +467,134 @@ describe('пункты 5 и 6: порядок блоков карточки (#59
     // отдаёт единственное действие экрана — «Оформить подписку».
     expect(code).toContain('{!subscription && <PurchaseCTAButton subscription={null} />}');
     expect(countOf(code, '<PurchaseCTAButton')).toBe(2);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Одна кнопка действия у истёкшей платной подписки (задача #65).
+ *
+ * Спека владельца: «Подключить устройство» при истёкшей подписке не рисуется,
+ * а единственное действие — «Продлить подписку», если денег хватает, и
+ * «Пополнить баланс», если нет. Разметка блока и его механизм сторожатся в
+ * `components/subscription/expiredSubscriptionAction.test.ts`; здесь — то, что
+ * относится к самой странице.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+describe('истёкшая подписка: одно действие на экране (#65)', () => {
+  it('видимость обеих кнопок решает чистая функция, а не условия в разметке', () => {
+    // ⚠️ Условие в JSX проверить нечем — компонентных тестов не бывает. Правило
+    // живёт в `subscriptionState.ts` и проверяется вызовом в
+    // `subscriptionState.test.ts`; здесь сторожится, что страница им ПОЛЬЗУЕТСЯ.
+    expect(code).toContain('resolveSubscriptionCardActions(subscription ?? null)');
+    expect(code).toContain('{cardActions.connectDevice && (');
+    expect(code).toContain('{cardActions.expiredAction && (');
+  });
+
+  it('блок «Пауза списаний» тоже под чистой функцией, а не под своим условием', () => {
+    // ⚠️ Решение владельца от 19.08.2026: при истёкшей подписке блока паузы нет
+    // ВОВСЕ. Довод не про лишнюю кнопку рядом с продлением, а про ложь: строка
+    // состояния блока у истёкшей подписки печатает «Списания активны».
+    expect(code).toContain('{subscription && cardActions.dailyPause && (');
+    // Прежнее условие блока не должно остаться нигде: оно и было дырой —
+    // «истекла» его не интересовала.
+    expect(code).not.toContain('subscription.is_daily && !subscription.is_trial');
+  });
+
+  it('в апстримной странице условие блока паузы прежнее — было именно так', () => {
+    // Пара: строка настоящая, а не опечатка, и до #65 условие выглядело так же
+    // у нас.
+    expect(upstreamCode).toContain('subscription.is_daily && !subscription.is_trial');
+  });
+
+  it('своего условия «истекла» на странице не появилось', () => {
+    // Второе правило разъехалось бы с `purchaseCta` молча: у истёкшей подписки
+    // рядом с продлением встала бы витрина либо пропали бы оба действия.
+    // ⚠️ `status === 'disabled'` под запрет не попадает: страница спрашивает его
+    // для блока паузы суточного тарифа, и к «истекла» это не относится.
+    expect(code).not.toContain('!subscription.is_active &&');
+    expect(code).not.toContain('isExpiredPaidSubscription(');
+  });
+
+  it('в апстримной странице кнопка подключения безусловна — было именно так', () => {
+    // Пара: до #65 условия не было ни у нас, ни в апстриме, и кнопка
+    // подключения висела у истёкшей подписки тоже.
+    expect(upstreamCode).toContain("t('dashboard.connectDevice')");
+    expect(upstreamCode).not.toContain('cardActions');
+  });
+
+  it('блок действия — общий компонент, а не своя разметка', () => {
+    expect(code).toContain("from '../components/subscription/ExpiredSubscriptionAction'");
+    expect(countOf(code, '<ExpiredSubscriptionAction')).toBe(1);
+  });
+
+  it('баланс приходит ОБЩИМ запросом, а не своей копией четырёх строк', () => {
+    // ⚠️ Прежняя проверка искала подстроку `queryKey: ['balance']` — и была
+    // ложно-зелёной: та же строка стоит в `pauseMutation.onSuccess` с прошлых
+    // задач, поэтому проверка проходила и при неправильном ключе нового
+    // запроса. Ревью доказало это подменой ключа на `['page-balance']`.
+    //
+    // Теперь запрос один на весь простой режим — `useBalanceQuery()` рядом с
+    // виджетом баланса. Связку «ключ + queryFn» сторожит проверка ниже, в файле
+    // виджета; здесь — что страница пользуется ею, а не держит свою.
+    expect(code).toContain("import { useBalanceQuery } from '../components/BalanceWidget'");
+    expect(code).toContain('useBalanceQuery()');
+    expect(code).toContain('balanceKopeks={balanceData?.balance_kopeks ?? 0}');
+    // Своего запроса баланса на странице нет вовсе: пятая копия этих четырёх
+    // строк и была бы началом расхождения.
+    expect(code).not.toContain('balanceApi.getBalance');
+  });
+
+  it('связка «ключ + queryFn» записана в общем запросе, и одной строки для неё мало', () => {
+    // ⚠️ Проверяется СВЯЗКА, а не наличие ключа: `queryKey` и `queryFn` должны
+    // стоять рядом в одном объявлении. Разъедься ключ — блок не заметит
+    // пополнения (мутация продления инвалидирует `['balance']`), и кнопка
+    // залипнет на «Пополнить баланс» после успешной оплаты.
+    const widget = read('src/simple/components/BalanceWidget.tsx');
+
+    // Разбор удался: файл прочитан, а не пуст.
+    expect(widget.length).toBeGreaterThan(1000);
+    expect(widget).toContain('export function useBalanceQuery()');
+
+    expect(widget).toMatch(/queryKey: \['balance'\],\s*\n\s*queryFn: balanceApi\.getBalance/);
+  });
+
+  it('строка из pauseMutation связке НЕ удовлетворяет — иначе проверка снова ложно-зелёная', () => {
+    // ⚠️ Пара «разбор удался» для регэкспа выше: инвалидация в
+    // `pauseMutation.onSuccess` содержит тот же `queryKey: ['balance']`, и
+    // именно она делала прежнюю проверку бессмысленной. Регэксп обязан её
+    // отвергать.
+    const invalidation = "queryClient.invalidateQueries({ queryKey: ['balance'] });";
+
+    expect(code).toContain(invalidation);
+    expect(invalidation).not.toMatch(
+      /queryKey: \['balance'\],\s*\n\s*queryFn: balanceApi\.getBalance/,
+    );
+  });
+
+  it('подпись продления на странице — длинная, пропом', () => {
+    // Решение владельца от 19.08.2026: на странице «Продлить подписку», на
+    // главной остаётся короткое «Продлить». Различие — проп, а не ветка внутри
+    // общего блока.
+    expect(code).toContain('renewLabelKey={PAGE_RENEW_LABEL_KEY}');
+    // Ключ не переписан литералом: его значение сторожится в `expiredAction.test.ts`.
+    expect(code).not.toContain('simple:subscription.expiredRenewAction');
+  });
+
+  it('пока баланс грузится, блок знает об этом', () => {
+    // ⚠️ Без флага первые 200–400 мс единственной кнопкой экрана будет
+    // «Пополнить баланс»: баланс равен нулю, пока не пришёл, а суммы баланса
+    // рядом на этой странице нет — в отличие от главной.
+    expect(code).toContain('isBalanceLoading={isBalancePending}');
+    expect(code).toContain('isPending: isBalancePending');
+  });
+
+  it('отступ кнопки продления пропом, а не пустой обёрткой', () => {
+    // ⚠️ У истёкшей подписки `PurchaseCTAButton` возвращает `null`; обёртка с
+    // `mb-5` осталась бы пустой дырой между блоком действия и ссылкой подписки.
+    expect(code).toContain('<PurchaseCTAButton subscription={subscription} className="mb-5" />');
+    // Запрет адресован именно обёртке кнопки: `mb-5` у других блоков страницы к
+    // делу не относится.
+    expect(code).not.toMatch(/<div className="mb-5">\s*<PurchaseCTAButton/);
   });
 });
 

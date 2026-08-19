@@ -13,6 +13,7 @@
  */
 
 import {
+  isExpiredPaidSubscription,
   resolveTariffChangeOption,
   type SubscriptionCtaAction,
 } from '../components/subscription/purchaseCta';
@@ -138,6 +139,64 @@ export function resolveSubscriptionInfoRowLayout(hasAutopay: boolean): Subscript
         countdown: INFO_ROW_CELL,
         autopay: null,
       };
+}
+
+export interface SubscriptionCardActions {
+  /** Кнопка «Подключить устройство». */
+  connectDevice: boolean;
+  /** Единственная кнопка истёкшей платной подписки: продление или пополнение. */
+  expiredAction: boolean;
+  /** Блок «Пауза списаний» суточного тарифа — целиком, вместе с его кнопкой. */
+  dailyPause: boolean;
+}
+
+/**
+ * Какие действия рисует карточка подписки на странице (задача #65).
+ *
+ * ⚠️ Условие живёт здесь, а не веткой в разметке: разметка его только читает.
+ * Проверить ветку в JSX нечем — компонентных тестов в проекте не бывает
+ * (docs/architecture/two-modes.md, раздел «Тесты»), а спека владельца именно
+ * про видимость: «Подключить устройство» при истёкшей подписке не рисуется, а
+ * действие остаётся ровно одно.
+ *
+ * ⚠️ Правило «истекла» НЕ пишется здесь второй раз — оно берётся из
+ * `purchaseCta`, того же модуля, что решает состав кнопок. Второе условие
+ * разъехалось бы с первым молча, со сборкой зелёной: у истёкшей подписки рядом
+ * с продлением встала бы «Оформить подписку» либо, наоборот, пропали бы оба
+ * действия.
+ *
+ * Подписки нет вовсе — карточки нет тоже (вместо неё пустое состояние), поэтому
+ * действий карточки нет: «Оформить подписку» там рисует `PurchaseCTAButton`
+ * снаружи.
+ *
+ * ⚠️ Блок «Пауза списаний» — третье поле, а не ветка в разметке, по той же
+ * причине, что и первые два: он стоял под условием `is_daily && !is_trial`, без
+ * оглядки на «истекла», и критерий «одна кнопка» у суточного тарифа не
+ * выполнялся. Решение владельца от 19.08.2026 — при истёкшей подписке блока нет
+ * ВОВСЕ, и главный довод не про лишнюю кнопку: строка состояния этого блока у
+ * истёкшей подписки печатает «Списания активны», то есть врёт.
+ *
+ * ⚠️ «Возобновить» при этом не потерялось: приостановленный суточный тариф
+ * (`status === 'disabled'`) — это состояние «истекла», и общий блок действия
+ * даёт ему ту же кнопку, тот же `togglePause`, веткой `resumeDaily`. Проверено
+ * перебором в `expiredSingleAction.test.ts`.
+ */
+export function resolveSubscriptionCardActions(
+  subscription: Subscription | null,
+): SubscriptionCardActions {
+  if (!subscription) {
+    return { connectDevice: false, expiredAction: false, dailyPause: false };
+  }
+
+  const expired = isExpiredPaidSubscription(subscription);
+
+  // Подключаться к мёртвой подписке бессмысленно, а после #61 это самая громкая
+  // кнопка экрана — владелец увидел её на стенде рядом с продлением.
+  return {
+    connectDevice: !expired,
+    expiredAction: expired,
+    dailyPause: Boolean(subscription.is_daily) && !subscription.is_trial && !expired,
+  };
 }
 
 export interface AdditionalOptions {
