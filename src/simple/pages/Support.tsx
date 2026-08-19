@@ -38,7 +38,7 @@ import { SIMPLE_NS } from '../i18n';
  * если понадобится, будет отдельной задачей со своей спекой; пока любая правка
  * здесь — это расхождение с тем, что владелец принял на стенде.
  *
- * Отличия от апстримного оригинала ровно четыре, и все механические:
+ * Отличия от апстримного оригинала ровно пять, и все механические:
  *
  *   1. карточка FAQ перед формой обращения — та самая правка форка;
  *   2. `Card`, `staggerContainer`/`staggerItem` и `MessageMediaGrid` берутся из
@@ -48,7 +48,13 @@ import { SIMPLE_NS } from '../i18n';
  *   3. подписи карточки читаются из нашего неймспейса (`tSimple`), потому что
  *      апстримные локали всех четырёх языков этой задачей от них очищены;
  *      остальная страница по-прежнему читает апстримный неймспейс;
- *   4. имя логгера — `SimpleSupport`, иначе два режима неразличимы в консоли.
+ *   4. три переформулированных заголовка — «Задать вопрос» вместо «Новый тикет»,
+ *      «Обращения» вместо «Ваших обращений» и подсказка выбора — тоже уехали в
+ *      наш неймспейс (#33). Раньше форк переписывал их прямо в `src/locales/ru.json`,
+ *      то есть менял слова и экспертному режиму заодно; из-за этого файл нельзя
+ *      было откатить к апстриму. Теперь наш текст живёт здесь, апстримный —
+ *      в апстримных локалях, и оба режима говорят каждый своими словами;
+ *   5. имя логгера — `SimpleSupport`, иначе два режима неразличимы в консоли.
  *
  * ⚠️ `/support?ticket=<id>` (переход из колокольчика) работает как в апстриме:
  * параметр никто не читает, тикет выбирается руками. Шов сверяет `pathname`, а
@@ -74,7 +80,8 @@ export function SimpleSupport() {
   log.debug('Component loaded');
 
   const { t } = useTranslation();
-  // Наши две подписи — из неймспейса `simple`; всё остальное на странице
+  // Наши строки — из неймспейса `simple`: две подписи карточки FAQ и три
+  // заголовка, переформулированных форком (#33). Всё остальное на странице
   // остаётся на апстримном `t`, как и было до раскола.
   const { t: tSimple } = useTranslation(SIMPLE_NS);
   const isAdmin = useAuthStore((state) => state.isAdmin);
@@ -368,7 +375,7 @@ export function SimpleSupport() {
           }}
         >
           <PlusIcon />
-          <span className="ml-2">{t('support.newTicket')}</span>
+          <span className="ml-2">{tSimple('support.newTicket')}</span>
         </Button>
       </motion.div>
 
@@ -424,7 +431,9 @@ export function SimpleSupport() {
       <motion.div variants={staggerItem} className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Tickets List */}
         <Card className="lg:col-span-1">
-          <h2 className="mb-4 text-lg font-semibold text-dark-100">{t('support.yourTickets')}</h2>
+          <h2 className="mb-4 text-lg font-semibold text-dark-100">
+            {tSimple('support.yourTickets')}
+          </h2>
 
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -758,7 +767,7 @@ export function SimpleSupport() {
                   />
                 </svg>
               </div>
-              <div className="text-dark-400">{t('support.selectTicket')}</div>
+              <div className="text-dark-400">{tSimple('support.selectTicket')}</div>
             </div>
           )}
         </Card>

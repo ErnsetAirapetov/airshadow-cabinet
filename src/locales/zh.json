@@ -254,7 +254,6 @@
   "dashboard": {
     "title": "个人中心",
     "welcome": "欢迎，{{name}}！",
-    "welcomeGreeting": "欢迎，",
     "welcomeNoName": "欢迎！",
     "yourSubscription": "您的订阅",
     "quickActions": "快捷操作",
@@ -637,9 +636,8 @@
     "backToList": "返回订阅列表",
     "confirmDelete": "删除订阅？",
     "cta": {
-      "renewHint": "为当前套餐续费一个新周期",
-      "changeHint": "更换为其他套餐",
-      "dailyHint": "按日扣费，无需手动续订",
+      "renewHint": "订阅已过期 — 续订以继续使用",
+      "activeHint": "续费和更换套餐",
       "expiredHint": "选择套餐并付款",
       "trialHint": "更多流量和设备"
     },
@@ -742,8 +740,6 @@
       "activating": "激活中...",
       "success": "优惠码激活成功！",
       "balanceAdded": "已添加余额：{{amount}}",
-      "expiredLabel": "已过期",
-      "disabledLabel": "已停用",
       "errors": {
         "not_found": "优惠码不存在",
         "expired": "优惠码已过期",

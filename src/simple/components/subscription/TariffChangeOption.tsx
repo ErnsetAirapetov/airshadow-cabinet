@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { ChevronRightIcon } from '@/components/icons';
+import { SIMPLE_NS } from '../../i18n';
 import type { SubscriptionCtaAction } from './purchaseCta';
 
 /**
@@ -15,6 +16,10 @@ import type { SubscriptionCtaAction } from './purchaseCta';
  * ⚠️ Соседи открывают шторку, этот пункт — ведёт на страницу смены тарифа.
  * Отсюда `Link`, а не `button`. Адрес приходит готовым из `purchaseCta`
  * (`action.to`): второе правило адреса разъехалось бы с первым молча.
+ *
+ * ⚠️ Переводчика два, как и в `PurchaseCTAButton` (#33): заголовок — апстримный
+ * ключ и апстримный `t`, подпись — наша строка из `src/simple/locales/` и
+ * `tSimple`. Разбор — в докстринге соседа, там же причина.
  */
 
 export interface TariffChangeOptionProps {
@@ -24,6 +29,7 @@ export interface TariffChangeOptionProps {
 
 export function TariffChangeOption({ action, isDark }: TariffChangeOptionProps) {
   const { t } = useTranslation();
+  const { t: tSimple } = useTranslation(SIMPLE_NS);
 
   return (
     <Link
@@ -33,7 +39,7 @@ export function TariffChangeOption({ action, isDark }: TariffChangeOptionProps) 
       <div className="flex items-center justify-between">
         <div>
           <div className="font-medium text-dark-100">{t(action.labelKey)}</div>
-          <div className="mt-1 text-sm text-dark-400">{t(action.hintKey)}</div>
+          <div className="mt-1 text-sm text-dark-400">{tSimple(action.hintKey)}</div>
         </div>
         <ChevronRightIcon className="text-dark-400" />
       </div>

@@ -254,7 +254,6 @@
   "dashboard": {
     "title": "داشبورد",
     "welcome": "خوش آمدید، {{name}}!",
-    "welcomeGreeting": "خوش آمدید،",
     "welcomeNoName": "خوش آمدید!",
     "yourSubscription": "اشتراک شما",
     "quickActions": "دسترسی سریع",
@@ -637,9 +636,8 @@
     "backToList": "بازگشت به فهرست اشتراک‌ها",
     "confirmDelete": "اشتراک حذف شود؟",
     "cta": {
-      "renewHint": "پرداخت تعرفه فعلی برای دوره جدید",
-      "changeHint": "رفتن به تعرفه دیگر",
-      "dailyHint": "کسر روزانه انجام می‌شود، تمدید دستی لازم نیست",
+      "renewHint": "اشتراک منقضی شده — برای ادامه استفاده تمدید کنید",
+      "activeHint": "تمدید و تغییر تعرفه",
       "expiredHint": "یک تعرفه انتخاب و پرداخت کنید",
       "trialHint": "ترافیک و دستگاه بیشتر"
     },
@@ -742,8 +740,6 @@
       "activating": "در حال فعال‌سازی...",
       "success": "کد تخفیف با موفقیت فعال شد!",
       "balanceAdded": "موجودی اضافه شده: {{amount}}",
-      "expiredLabel": "منقضی شده",
-      "disabledLabel": "غیرفعال",
       "errors": {
         "not_found": "کد تخفیف یافت نشد",
         "expired": "کد تخفیف منقضی شده",

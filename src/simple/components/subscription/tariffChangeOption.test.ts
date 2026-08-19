@@ -128,7 +128,10 @@ describe('пункт ведёт на страницу смены тарифа, �
 
   it('подписи тоже приходят из правила, а не литералами', () => {
     expect(option).toContain('t(action.labelKey)');
-    expect(option).toContain('t(action.hintKey)');
+    // Подпись читается нашим переводчиком с #33: апстримных ключей под неё
+    // больше нет, `src/locales/*.json` откачены. Разбор — в докстринге
+    // `PurchaseCTAButton.tsx`, сторож пары — `upstreamLocalesDrift.test.ts`.
+    expect(option).toContain('tSimple(action.hintKey)');
   });
 
   it('шторки у пункта нет', () => {

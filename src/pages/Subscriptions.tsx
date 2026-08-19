@@ -113,21 +113,32 @@ export default function Subscriptions() {
         <h1 className="truncate text-xl font-bold" style={{ color: g.text }}>
           {t('subscriptions.title', 'Мои подписки')}
         </h1>
+        {/* «+ Купить ещё» — только если уже есть платная активная подписка */}
+        {!isLoading && hasActivePaid && (
+          <button
+            onClick={() => navigate('/subscription/purchase')}
+            className="flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors"
+            style={{
+              background: 'rgba(var(--color-accent-400), 0.1)',
+              color: 'rgb(var(--color-accent-400))',
+              border: '1px solid rgba(var(--color-accent-400), 0.2)',
+            }}
+          >
+            <PlusIcon className="h-4 w-4" />
+            {t('subscriptions.buyAnother', 'Новый тариф')}
+          </button>
+        )}
       </div>
 
-      {/* Одна явная точка входа в покупку вместо двух разных на разных состояниях:
-          тесная кнопка-плюсик в шапке читалась как служебная иконка и терялась.
-          Путь к покупке НЕ убираем — меняется только его вид (ср. Telegram-баг
-          #605056/#605063, где экран остался вообще без кнопки «Купить»). */}
-      {!isLoading && subscriptions.length > 0 && (
+      {/* Есть подписки, но платной активной нет (только триал/истёкшие) —
+          даём ЯВНУЮ primary-кнопку покупки: мы продаём подписки. */}
+      {!isLoading && subscriptions.length > 0 && !hasActivePaid && (
         <button
           onClick={() => navigate('/subscription/purchase')}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-accent-500 p-3.5 text-sm font-semibold text-on-accent transition-colors hover:bg-accent-600"
         >
           <PlusIcon className="h-5 w-5" />
-          {hasActivePaid
-            ? t('subscriptions.buyAnother', 'Новый тариф')
-            : t('subscriptions.browsePlans', 'Посмотреть тарифы и купить подписку')}
+          {t('subscriptions.browsePlans', 'Посмотреть тарифы и купить подписку')}
         </button>
       )}
 
