@@ -12,7 +12,7 @@ import { useAuthStore } from '@/store/auth';
 import { useModeStore } from '@/store/mode';
 // Реестр простых страниц — один на приложение (#45), импорт разрешён поимённо в
 // scripts/check-mode-boundaries.mjs.
-import { resolveSimpleRoute } from '@/simple';
+import { hasSimpleView } from '@/simple';
 import { displayName } from '@/utils/displayName';
 import { useShallow } from 'zustand/shallow';
 import { useTheme } from '@/hooks/useTheme';
@@ -415,7 +415,10 @@ export function AppHeader({
                 {/* Переключатель в простой режим — строкой меню, как в ящике
                     простого режима (#48), и виден в обоих режимах (#45): нет
                     простой версии пути — уводим на главную, иначе кнопка
-                    мёртвая. Неймспейс подписи литералом (#46) — сознательно, а не
+                    мёртвая. «Простая версия» с #64 — это своя простая страница
+                    ИЛИ апстримная страница в простой оболочке (сквозной список),
+                    и ответ на оба вопроса сразу даёт hasSimpleView.
+                    Неймспейс подписи литералом (#46) — сознательно, а не
                     по запрету гейта: файл в SEAMS, и импорт SIMPLE_NS гейт бы
                     пропустил; литерал держит шапку независимой от внутренностей
                     простого режима (docs/architecture/two-modes.md). */}
@@ -425,7 +428,7 @@ export function AppHeader({
                     haptic.impact('light');
                     setMode('simple');
                     setMobileMenuOpen(false);
-                    if (resolveSimpleRoute(location.pathname) === null) {
+                    if (!hasSimpleView(location.pathname)) {
                       navigate('/');
                     }
                   }}

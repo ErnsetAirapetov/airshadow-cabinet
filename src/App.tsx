@@ -25,7 +25,7 @@ import Layout from './components/layout/Layout';
 // Простой режим. Один из трёх апстримных файлов, которым разрешено импортировать
 // из src/simple/ — полный список см. SEAMS в scripts/check-mode-boundaries.mjs и
 // раздел «Поимённый список: SEAMS» в docs/architecture/two-modes.md.
-import { SimpleShell, useSimpleOverride } from './simple';
+import { SimpleShell, useSimpleOverride, useSimplePassthrough } from './simple';
 import PageLoader from './components/common/PageLoader';
 import {
   MaintenanceScreen,
@@ -182,6 +182,8 @@ function ProtectedRoute({
   // принимается ДО рендера: апстримная страница не должна отрисоваться, чтобы
   // через кадр быть заменённой простой. Канон — docs/architecture/two-modes.md.
   const SimplePage = useSimpleOverride(location.pathname);
+  // Третья ветка шва (#64): страница остаётся апстримной, но оболочка — простая.
+  const isPassthrough = useSimplePassthrough(location.pathname);
 
   if (isLoading) {
     return <PageLoader variant="dark" />;
@@ -205,6 +207,15 @@ function ProtectedRoute({
       </LazyPage>
     );
     return withLayout ? <SimpleShell>{page}</SimpleShell> : page;
+  }
+
+  // Сквозной список (#64): апстримная страница в простой оболочке. Стоит ПОСЛЕ
+  // ветки реестра (своя простая страница сильнее) и ДО апстримной, иначе
+  // недостижима. `children` уже завёрнут в LazyPage самим маршрутом, так что
+  // постраничный ErrorBoundary и Suspense не теряются, а `withLayout={false}`
+  // означает «без оболочки вообще» и здесь тоже.
+  if (isPassthrough) {
+    return withLayout ? <SimpleShell>{children}</SimpleShell> : <>{children}</>;
   }
 
   return withLayout ? <Layout>{children}</Layout> : <>{children}</>;
