@@ -36,7 +36,9 @@ export type SimpleRoute = {
  * Список ведётся руками, и это осознанно: `App.tsx` в рантайме не прочитать.
  * Забыть пополнить его нельзя — за составом следит `routes.test.tsx`, который
  * разбирает `App.tsx` и требует, чтобы ни один статический маршрут под швом не
- * доставался записи реестра с другим путём.
+ * доставался записи реестра с другим путём. С #64 список гейтит оба списка
+ * путей, поэтому ту же сторону — чтобы чужой статический маршрут не достался
+ * записи СКВОЗНОГО списка — сторожит `passthrough.test.ts`.
  *
  * Запретом навсегда список не является: литеральная запись реестра сильнее (см.
  * порядок проходов ниже), так что свой экран результата оплаты простой режим
@@ -53,16 +55,23 @@ function hits(path: string, pathname: string): boolean {
 }
 
 /**
- * Чистая часть подмены — проверяется тестом без реестра.
+ * Ранжированное совпадение пути со СПИСКОМ ПУТЕЙ — без компонентов вообще.
  *
- * Ранжирование: литерал специфичнее параметра, поэтому проходов три —
- * литералы реестра, литералы апстрима (они означают «подмены нет»), и только
- * потом записи с параметрами. Порядок записей внутри прохода сохраняется.
+ * Ранжирование: литерал специфичнее параметра, поэтому проходов три — литералы
+ * списка, литералы апстрима (они означают «совпадения нет»), и только потом
+ * записи с параметрами. Порядок записей внутри прохода сохраняется.
+ *
+ * ⚠️ Уровень «только пути» выделен не ради красоты: сквозной список (#64)
+ * хранит именно пути, строками, без единого импорта компонента — так простой
+ * слой остаётся свободным от `src/pages/**`, и гейт границ не приходится
+ * расширять. Матчинг у обоих списков обязан быть ОДИН: второй разъехался бы с
+ * первым молча, и ловушка #53 (литеральный сегмент для `matchPath` неотличим от
+ * параметра) вернулась бы на новом месте.
  */
-export function matchSimpleRoute(routes: SimpleRoute[], pathname: string): SimpleRoute | null {
-  for (const route of routes) {
-    if (isLiteral(route.path) && hits(route.path, pathname)) {
-      return route;
+export function matchPathList(paths: string[], pathname: string): string | null {
+  for (const path of paths) {
+    if (isLiteral(path) && hits(path, pathname)) {
+      return path;
     }
   }
 
@@ -70,11 +79,32 @@ export function matchSimpleRoute(routes: SimpleRoute[], pathname: string): Simpl
     return null;
   }
 
-  for (const route of routes) {
-    if (!isLiteral(route.path) && hits(route.path, pathname)) {
-      return route;
+  for (const path of paths) {
+    if (!isLiteral(path) && hits(path, pathname)) {
+      return path;
     }
   }
 
   return null;
+}
+
+/**
+ * Чистая часть подмены — проверяется тестом без реестра.
+ *
+ * Вся логика ранжирования живёт в `matchPathList`; здесь только возврат записи
+ * реестра, выигравшей путём.
+ */
+export function matchSimpleRoute(routes: SimpleRoute[], pathname: string): SimpleRoute | null {
+  const path = matchPathList(
+    routes.map((route) => route.path),
+    pathname,
+  );
+
+  if (path === null) {
+    return null;
+  }
+
+  // Дубль пути в реестре ловит `routes.test.tsx`; здесь, как и раньше,
+  // выигрывает первая запись.
+  return routes.find((route) => route.path === path) ?? null;
 }

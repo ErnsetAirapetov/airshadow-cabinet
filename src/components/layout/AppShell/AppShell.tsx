@@ -12,7 +12,7 @@ import { useAuthStore } from '@/store/auth';
 import { useModeStore } from '@/store/mode';
 // Реестр простых страниц — один на приложение (#45), импорт разрешён поимённо в
 // scripts/check-mode-boundaries.mjs.
-import { resolveSimpleRoute } from '@/simple';
+import { hasSimpleView } from '@/simple';
 import { useHaptic } from '@/platform';
 import { useTelegramSDK } from '@/hooks/useTelegramSDK';
 import { useHeaderHeight } from '@/hooks/useHeaderHeight';
@@ -257,6 +257,9 @@ export function AppShell({ children }: AppShellProps) {
           <div className="flex shrink-0 items-center gap-2 justify-self-end">
             {/* Переключатель в простой режим виден в обоих режимах (#45): нет
                 простой версии пути — уводим на главную, иначе кнопка мёртвая.
+                «Простая версия» с #64 — это своя простая страница ИЛИ апстримная
+                страница в простой оболочке (сквозной список), и ответ на оба
+                вопроса сразу даёт hasSimpleView.
                 Неймспейс подписи литералом (#46) — сознательно, а не по запрету
                 гейта: файл в SEAMS, и импорт SIMPLE_NS гейт бы пропустил; литерал
                 держит шапку независимой от внутренностей простого режима
@@ -265,7 +268,7 @@ export function AppShell({ children }: AppShellProps) {
               onClick={() => {
                 haptic.impact('light');
                 setMode('simple');
-                if (resolveSimpleRoute(location.pathname) === null) {
+                if (!hasSimpleView(location.pathname)) {
                   navigate('/');
                 }
               }}
