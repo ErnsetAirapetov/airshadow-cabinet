@@ -5,12 +5,13 @@ import { describe, expect, it } from 'vitest';
  * Сторожа действий в шапке простого режима — десктопной и в ящике бургера
  * (задачи #42, #43, #47).
  *
- * ⚠️ Файлы читаются ТЕКСТОМ, а не импортируются. Компонентных тестов в проекте
- * не бывает: `vitest.config.ts` задаёт `environment: 'node'`, jsdom и
- * testing-library в репе нет, а alias `@/` в тестах не разрешается — импорт
- * шапки потянул бы весь граф приложения и упал бы на разрешении модулей.
- * Тот же приём, что в `src/simple/routes.test.tsx`; цена та же — разбор видит
- * только то, что записано литералом, поэтому у каждого сторожа ниже есть
+ * ⚠️ Файлы читаются ТЕКСТОМ, а не импортируются, и причина ровно одна: alias
+ * `@/` в тестах не разрешается, а шапка тянет его через `@/store`, `@/hooks` и
+ * апстримные компоненты — импорт упал бы на разрешении модулей. (Отрисовать
+ * компонент сам по себе в этом окружении можно, `renderToStaticMarkup` работает
+ * при `environment: 'node'`; сюда он не достаёт из-за alias, а не из-за jsdom —
+ * см. канон, «Тесты».) Тот же приём, что в `src/simple/routes.test.tsx`; цена
+ * та же — разбор видит только то, что записано литералом, поэтому у каждого сторожа ниже есть
  * парная проверка «разбор удался».
  *
  * Что охраняется по существу (#47): владелец потребовал шапку «один в один» с
@@ -33,6 +34,19 @@ function read(path: string): string {
 
 const shell = read(SHELL);
 const header = read(HEADER);
+
+/**
+ * Исходник без комментариев — для проверок, которые иначе поймали бы прозу.
+ * Докстринги шапки цитируют и `useTranslation(SIMPLE_NS)`, и имена иконок, так
+ * что сторож привязки неймспейса (#58) обязан смотреть только на код. Тот же
+ * приём, что в `topUpPage.test.ts` и `locales.test.ts`.
+ */
+function code(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
+const shellCode = code(shell);
+const headerCode = code(header);
 
 describe('апстримные компоненты шапки берутся напрямую', () => {
   it('копии LanguageSwitcher в простом режиме нет', () => {
@@ -96,6 +110,14 @@ describe('правый блок действий десктопной шапки
     expect(rightActions).toContain("aria-label={tSimple('mode.toExpert')}");
     expect(rightActions).not.toMatch(/\/>\s*\{tSimple\('mode\.toExpert'\)\}/);
     expect(rightActions).toContain('<PiArrowsOutSimple className="h-5 w-5" />');
+
+    // ⚠️ И привязка `tSimple` к НАШЕМУ неймспейсу (#58). Без этой строки
+    // подмена `useTranslation(SIMPLE_NS)` на `useTranslation()` оставляла
+    // сторожа зелёными, а в title и aria-label уезжал сырой ключ
+    // `mode.toExpert`. Проверка привязки по всему слою — в
+    // `src/simple/i18nNamespace.test.tsx`, там же она доказана отрисовкой.
+    expect(shellCode).toContain("import { SIMPLE_NS } from '../../i18n'");
+    expect(shellCode).toContain('const { t: tSimple } = useTranslation(SIMPLE_NS)');
   });
 
   it('все действия — одинаковые квадратные кнопки апстримного вида', () => {
@@ -192,5 +214,11 @@ describe('ящик бургер-меню мобильной шапки прос�
     // задача #47 его не отменяла.
     expect(drawer).toMatch(/className="nav-item w-full"[\s\S]{0,200}<PiArrowsOutSimple/);
     expect(drawerActions).not.toContain('PiArrowsOutSimple');
+
+    // Подпись пункта — наша строка, и она обязана читаться из нашего
+    // неймспейса (#58): иначе в бургере окажется сырой ключ.
+    expect(drawer).toContain("{tSimple('mode.toExpert')}");
+    expect(headerCode).toContain("import { SIMPLE_NS } from '../../i18n'");
+    expect(headerCode).toContain('const { t: tSimple } = useTranslation(SIMPLE_NS)');
   });
 });

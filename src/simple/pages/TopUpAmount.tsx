@@ -27,6 +27,7 @@ import { checkRateLimit, getRateLimitResetTime, RATE_LIMIT_KEYS } from '@/utils/
 import { getSafeRedirectPath } from '@/utils/safeRedirect';
 import { saveTopUpPendingInfo } from '@/utils/topUpStorage';
 import { BalanceWidget } from '../components/BalanceWidget';
+import { resolveTopUpSearch } from './topUpMethodSelectState';
 import {
   resolveInitialAmountRubles,
   resolveQuickAmountsLayout,
@@ -239,15 +240,19 @@ export function SimpleTopUpAmount() {
   const amountTouchedRef = useRef(false);
 
   // Once methods have loaded, redirect to method selection if this method id is unknown.
+  //
+  // ⚠️ Хвост `amount`/`returnTo` собирает `resolveTopUpSearch` — та же чистая
+  // функция, которой его собирают карточки способов (#55). Раньше здесь стояла
+  // своя сборка через `URLSearchParams`: одно правило в двух местах, и правка
+  // одного из них разошлась бы с другим молча (#58).
+  //
+  // Импорт из модуля СОСЕДНЕЙ страницы (`topUpMethodSelectState`) — осознанно, а
+  // не по недосмотру: правило принадлежит экрану выбора способа (он ради него и
+  // существует), а редирект ведёт именно туда. Правило места назначения берём у
+  // места назначения.
   useEffect(() => {
     if (methods && !method) {
-      const params = new URLSearchParams();
-      const amount = searchParams.get('amount');
-      const rt = searchParams.get('returnTo');
-      if (amount) params.set('amount', amount);
-      if (rt) params.set('returnTo', rt);
-      const qs = params.toString();
-      navigate(`/balance/top-up${qs ? `?${qs}` : ''}`, { replace: true });
+      navigate(`/balance/top-up${resolveTopUpSearch(searchParams)}`, { replace: true });
     }
   }, [methods, method, navigate, searchParams]);
 

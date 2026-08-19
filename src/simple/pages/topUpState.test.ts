@@ -13,10 +13,10 @@ import {
 /**
  * Чистая логика простого экрана суммы пополнения (задача #53).
  *
- * ⚠️ Модуль чистый именно поэтому: компонентных тестов в проекте не бывает
- * (`vitest.config.ts` — `environment: 'node'`, ни jsdom, ни testing-library, alias
- * `@/` в тестах не разрешается). Без него ветки «какой тариф», «какие четыре
- * суммы», «чем заполнено поле» остались бы непроверенными вообще.
+ * ⚠️ Модуль чистый именно поэтому: граф импортов страницы дотягивается до alias
+ * `@/`, а он в тестах не разрешается — отрисовать её целиком нельзя ни рендером,
+ * ни импортом. Без чистого модуля ветки «какой тариф», «какие четыре суммы», «чем
+ * заполнено поле» остались бы непроверенными вообще.
  *
  * Фикстуры собираются минимальными и приводятся к типу: `Tariff` и `PeriodOption`
  * в контракте огромные, а разбираемые поля — единицы. Приведение здесь честнее
@@ -505,7 +505,10 @@ describe('resolveQuickAmountsRubles — кнопка на каждый пери�
  * `balancePage.test.ts`.
  */
 function gridColumns(source: string): Array<{ breakpoint: string; count: number }> {
-  return [...source.matchAll(/(?:([a-z]+):)?grid-cols-(\d+)/g)].map((match) => ({
+  // ⚠️ Префикс `[a-z0-9]+`, а не `[a-z]+` (#58): на `[a-z]+` брейкпоинт `2xl`
+  // разбирался как `xl`, то есть обещание «новый брейкпоинт подхватится сам»
+  // на нём давало ложно-зелёное.
+  return [...source.matchAll(/(?:([a-z0-9]+):)?grid-cols-(\d+)/g)].map((match) => ({
     breakpoint: match[1] ?? '',
     count: Number(match[2]),
   }));
@@ -521,15 +524,39 @@ function gridColumns(source: string): Array<{ breakpoint: string; count: number 
 function colSpans(source: string): Record<string, number> {
   const spans: Record<string, number> = {};
 
-  for (const match of source.matchAll(/(?:^|\s)(?:([a-z]+):)?col-span-(\d+)(?=\s|$)/g)) {
+  // Префикс с цифрой (`2xl:`) — как в `gridColumns` выше: иначе `2xl:col-span-3`
+  // не матчился бы вообще и молча выпадал из каскада (#58).
+  for (const match of source.matchAll(/(?:^|\s)(?:([a-z0-9]+):)?col-span-(\d+)(?=\s|$)/g)) {
     spans[match[1] ?? ''] = Number(match[2]);
   }
 
   return spans;
 }
 
-/** Брейкпоинты сетки снизу вверх — порядок каскада Tailwind. */
-const BREAKPOINTS = ['', 'sm', 'lg'];
+/**
+ * Все брейкпоинты Tailwind снизу вверх — лестница каскада, а не состав сетки.
+ *
+ * ⚠️ Раньше здесь стоял состав (`['', 'sm', 'lg']`) и сверялся на равенство, то
+ * есть сторож требовал ровно три брейкпоинта: дописанный `md:grid-cols-*`
+ * краснел бы без причины (#58). Состав спеки — два числа и «одной строкой на
+ * `lg`» — проверяется ПОИМЁННО отдельным тестом; здесь нужен только ПОРЯДОК,
+ * по которому считается каскад.
+ */
+const BREAKPOINT_LADDER = ['', 'sm', 'md', 'lg', 'xl', '2xl'];
+
+/**
+ * ⚠️ Граница приёма: в лестнице только БРЕЙКПОИНТЫ. Вариант не про ширину
+ * (`dark:grid-cols-2`, `print:`) в неё не попадёт, и сверка ниже покраснеет — это
+ * правильное поведение, а не ложный красный: каскад такого варианта разбор
+ * упорядочить не может. Появится нужда — вариант учитывают осознанно, а не
+ * подгоняют регулярку.
+ */
+
+/** Брейкпоинты, реально объявленные в литерале сетки, снизу вверх. */
+function usedBreakpoints(gridClassName: string): string[] {
+  const declared = new Set(gridColumns(gridClassName).map(({ breakpoint }) => breakpoint));
+  return BREAKPOINT_LADDER.filter((breakpoint) => declared.has(breakpoint));
+}
 
 /**
  * ЭФФЕКТИВНЫЙ пролёт последней кнопки на каждом брейкпоинте.
@@ -551,7 +578,9 @@ function effectiveSpans(lastItemClassName: string): Record<string, number> {
   const effective: Record<string, number> = {};
   let carried = 1;
 
-  for (const breakpoint of BREAKPOINTS) {
+  // Каскад считается по всей лестнице, а не по составу сетки: пролёт может быть
+  // объявлен на брейкпоинте, где число колонок не меняется.
+  for (const breakpoint of BREAKPOINT_LADDER) {
     carried = declared[breakpoint] ?? carried;
     effective[breakpoint] = carried;
   }
@@ -568,7 +597,12 @@ describe('resolveQuickAmountsLayout — раскладка кнопок (зад�
       const { gridClassName, lastItemClassName } = resolveQuickAmountsLayout(count);
 
       expect(gridClassName, `${count} кнопок`).toMatch(/(^|\s)grid(\s|$)/);
-      expect(gridColumns(gridClassName), `${count} кнопок`).toHaveLength(3);
+      // ⚠️ «Больше нуля», а не «ровно три» (#58). Ровно три означало «сколько
+      // брейкпоинтов сейчас в спеке», то есть добавление `md:grid-cols-*`
+      // краснело бы без причины — а это украшение, не дефект. Состав спеки
+      // сверяется ПОИМЁННО в тесте ниже (база, `sm`, `lg`), сторож дыр ходит по
+      // найденным брейкпоинтам и новый подхватит сам.
+      expect(gridColumns(gridClassName), `${count} кнопок`).not.toHaveLength(0);
       expect(typeof lastItemClassName).toBe('string');
     }
 
@@ -621,9 +655,15 @@ describe('resolveQuickAmountsLayout — раскладка кнопок (зад�
         gridColumns(gridClassName).map(({ breakpoint, count: columns }) => [breakpoint, columns]),
       );
 
-      expect([...columnsBy.keys()].sort(), `${count} кнопок: ${gridClassName}`).toEqual(
-        [...BREAKPOINTS].sort(),
-      );
+      // ⚠️ Брейкпоинты берутся ИЗ ЛИТЕРАЛА, а не сверяются с ожидаемым составом
+      // (#58): требование «ровно база, sm и lg» краснело на дописанном `md:`,
+      // хотя новый брейкпоинт — украшение, а не дефект. Состав спеки проверяет
+      // тест выше поимённо; здесь важно другое — дыр не должно быть НИ НА ОДНОМ
+      // объявленном брейкпоинте, включая только что добавленный.
+      const breakpoints = usedBreakpoints(gridClassName);
+
+      expect(breakpoints, `${count} кнопок: ${gridClassName}`).toContain('');
+      expect(breakpoints.length, `${count} кнопок: ${gridClassName}`).toBe(columnsBy.size);
 
       if (count < 1) {
         expect(lastItemClassName, `${count} кнопок: растягивать нечего`).toBe('');
@@ -632,7 +672,7 @@ describe('resolveQuickAmountsLayout — раскладка кнопок (зад�
 
       const spans = effectiveSpans(lastItemClassName);
 
-      for (const breakpoint of BREAKPOINTS) {
+      for (const breakpoint of breakpoints) {
         const columns = columnsBy.get(breakpoint) as number;
         const remainder = count % columns;
         const where = `${count} кнопок, брейкпоинт '${breakpoint || 'база'}' (${columns} колонок): «${lastItemClassName}»`;
@@ -665,7 +705,10 @@ describe('resolveQuickAmountsLayout — раскладка кнопок (зад�
     for (const count of [0, -1]) {
       const { gridClassName, lastItemClassName } = resolveQuickAmountsLayout(count);
 
-      expect(gridColumns(gridClassName)).toHaveLength(3);
+      // Классы рабочие, а не пустая строка. Число брейкпоинтов не сверяем: оно
+      // не про тотальность функции, а про украшение сетки (#58).
+      expect(gridColumns(gridClassName)).not.toHaveLength(0);
+      expect(gridClassName).toMatch(/(^|\s)grid(\s|$)/);
       expect(lastItemClassName).toBe('');
     }
   });
