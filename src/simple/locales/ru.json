@@ -19,6 +19,9 @@
       "disabledLabel": "Отключена"
     }
   },
+  "subscription": {
+    "expiredRenewAction": "Продлить подписку"
+  },
   "support": {
     "faqLinkTitle": "Ответы на частые вопросы",
     "faqLinkHint": "Возможно, решение уже описано — посмотрите перед обращением"

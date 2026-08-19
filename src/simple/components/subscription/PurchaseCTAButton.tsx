@@ -7,6 +7,15 @@ import type { Subscription } from '@/types';
 
 interface PurchaseCTAButtonProps {
   subscription: Subscription | null;
+  /**
+   * Внешний отступ места вызова.
+   *
+   * ⚠️ Пропом, а не обёрткой в разметке (#65): у истёкшей платной подписки
+   * действий здесь нет вовсе, компонент возвращает `null` — и обёртка с
+   * отступом осталась бы пустой дырой между кнопкой продления и ссылкой
+   * подписки. Отступ обязан исчезать вместе с кнопками.
+   */
+  className?: string;
 }
 
 /**
@@ -24,13 +33,16 @@ interface PurchaseCTAButtonProps {
  * `purchaseCtaButton.test.ts`, там же записано, почему сравнение идёт с живой
  * выдачей `resolveConnectButtonAccent`, а не с числом.
  */
-export default function PurchaseCTAButton({ subscription }: PurchaseCTAButtonProps) {
+export default function PurchaseCTAButton({
+  subscription,
+  className = '',
+}: PurchaseCTAButtonProps) {
   const actions = resolveSubscriptionCta(subscription);
 
   if (actions.length === 0) return null;
 
   return (
-    <div className="space-y-3">
+    <div className={`space-y-3 ${className}`}>
       {actions.map((action) =>
         action.tone === 'subtle' ? (
           <SecondaryAction key={action.kind} action={action} />

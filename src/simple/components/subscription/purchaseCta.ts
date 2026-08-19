@@ -32,6 +32,28 @@ const CHANGE_TARIFF: Omit<SubscriptionCtaAction, 'hintKey'> = {
 };
 
 /**
+ * Подписка ЕСТЬ и она истекла — единственное правило «истекла» простого режима.
+ *
+ * ⚠️ Отсутствие подписки сюда НЕ входит, и это суть развода #65. Прежде оба
+ * случая отвечали на одно условие (`!subscription || (...)`), и одинаковый
+ * ответ был неверен: без подписки продлевать нечего и нужна витрина, а у
+ * истёкшей есть `id`, тариф и цена — её продлевают, как на главной.
+ *
+ * Предикат экспортируется, чтобы страница подписки спрашивала ТО ЖЕ правило
+ * (`pages/subscriptionState.ts`): второе условие «истекла» разъехалось бы с
+ * этим молча, и экран получил бы либо две кнопки, либо ни одной.
+ *
+ * ⚠️ Не путать с `isExpired` из `pages/dashboardState.ts` — там правило другое
+ * (`is_expired || status === 'disabled'`) и относится к выбору карточки
+ * главной; канон, раздел «Заимствование логики».
+ */
+export function isExpiredPaidSubscription(subscription: Subscription | null): boolean {
+  if (!subscription) return false;
+
+  return !subscription.is_active && !subscription.is_trial && !subscription.is_limited;
+}
+
+/**
  * Полный набор действий подписки — ДО разделения на кнопки и пункт блока (#61).
  *
  * ⚠️ Единственный источник истины для обоих потребителей. Владелец потребовал
@@ -41,15 +63,13 @@ const CHANGE_TARIFF: Omit<SubscriptionCtaAction, 'hintKey'> = {
  * кнопкой, либо пропал бы у того, у кого кнопка была. Поэтому набор считается
  * один раз здесь, а `resolveSubscriptionCta` и `resolveTariffChangeOption`
  * только делят его между собой — их выдачи по построению не пересекаются и в
- * сумме дают этот набор.
+ * сумме дают этот набор. Свойство доказано перебором состояний в
+ * `purchaseCta.test.ts`, и развод ветки «истекла» (#65) его сохранил: пустой
+ * набор делится на две пустые выдачи.
  */
 function resolveAllSubscriptionActions(subscription: Subscription | null): SubscriptionCtaAction[] {
-  const isExpired =
-    !subscription ||
-    (!subscription.is_active && !subscription.is_trial && !subscription.is_limited);
-
-  // Подписки нет или она истекла — продлевать нечего, нужен новый тариф.
-  if (isExpired) {
+  // Подписки нет вовсе — продлевать нечего, нужен новый тариф.
+  if (!subscription) {
     return [
       {
         kind: 'purchase',
@@ -59,6 +79,16 @@ function resolveAllSubscriptionActions(subscription: Subscription | null): Subsc
         hintKey: 'subscription.cta.expiredHint',
       },
     ];
+  }
+
+  // Подписка есть и истекла — действий здесь НЕТ, и это не пропажа (#65).
+  // Единственную кнопку экрана («Продлить подписку» либо «Пополнить баланс»)
+  // считает общий блок `ExpiredSubscriptionAction`: у истёкшей подписки есть
+  // id и цена, поэтому её продлевают, а не оформляют заново. Отдай мы здесь
+  // «Оформить подписку» — рядом с той кнопкой встала бы вторая, ровно то, что
+  // владелец и просил убрать.
+  if (isExpiredPaidSubscription(subscription)) {
+    return [];
   }
 
   // Триал продлить нельзя — из него только выходят на платный тариф.

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router';
 import { subscriptionApi } from '@/api/subscription';
 import { DEVICE_ALIAS_MAX_LENGTH } from '@/constants/devices';
+import { useBalanceQuery } from '../components/BalanceWidget';
 import { WebBackButton } from '../components/WebBackButton';
 import { useDestructiveConfirm } from '@/platform/hooks/useNativeDialog';
 import TrafficProgressBar from '../components/dashboard/TrafficProgressBar';
@@ -48,9 +49,12 @@ import {
   resolveAdditionalOptions,
   resolveCountdownDisplay,
   resolveCountdownTickMs,
+  resolveSubscriptionCardActions,
   resolveSubscriptionInfoRowLayout,
 } from './subscriptionState';
 import { ConnectDeviceButton } from '../components/subscription/ConnectDeviceButton';
+import { ExpiredSubscriptionAction } from '../components/subscription/ExpiredSubscriptionAction';
+import { PAGE_RENEW_LABEL_KEY } from '../components/subscription/expiredAction';
 import { TariffChangeOption } from '../components/subscription/TariffChangeOption';
 import { DeviceTopupSheet } from '../components/subscription/sheets/DeviceTopupSheet';
 import { DeviceReductionSheet } from '../components/subscription/sheets/DeviceReductionSheet';
@@ -362,10 +366,23 @@ export function SimpleSubscription() {
     refetchOnMount: 'always',
   });
 
+  // ⚠️ Баланс берётся ОБЩИМ запросом `useBalanceQuery()`, а не своей копией
+  // четырёх строк (#65). Ключ, `queryFn` и `staleTime` объявлены один раз рядом
+  // с виджетом баланса, поэтому наблюдатели одного ключа не могут разъехаться
+  // молча: react-query дедуплицирует запрос с главной, а мутация продления в
+  // блоке действия инвалидирует именно `['balance']` — на своём ключе кнопка не
+  // заметила бы пополнения и залипла бы на «Пополнить баланс».
+  const { data: balanceData, isPending: isBalancePending } = useBalanceQuery();
+
   const isTariffsMode = purchaseOptions?.sales_mode === 'tariffs';
   // Состав блока «Дополнительные опции» — чистая функция (#61). Условий в JSX
   // нет: с ними «Сменить тариф» разъехалась бы с правилом из `purchaseCta`.
   const additionalOptions = resolveAdditionalOptions(subscription ?? null, isTariffsMode);
+  // ⚠️ Действия карточки — тоже чистая функция (#65): при истёкшей платной
+  // подписке «Подключить устройство» не рисуется, а единственным действием
+  // становится продление или пополнение. Ветка в разметке проверялась бы только
+  // глазами, а спека владельца именно про видимость.
+  const cardActions = resolveSubscriptionCardActions(subscription ?? null);
 
   // SBP (Platega) recurring auto-payment status. Polls every 8s while a
   // payment is PENDING (waiting for bank-app confirmation) so the UI flips
@@ -1019,21 +1036,48 @@ export function SimpleSubscription() {
                    Главное действие экрана. Общий компонент с карточкой на
                    главной (#61): до него копий было две, и после #59 они
                    разошлись — акцент достался только этой. Различия мест вызова
-                   пропами: здесь это внешний отступ, атрибута онбординга нет. */}
-              <ConnectDeviceButton
-                subscription={subscription}
-                connectedDevices={connectedDevices}
-                className="mb-3"
-              />
+                   пропами: здесь это внешний отступ, атрибута онбординга нет.
+
+                   ⚠️ При истёкшей подписке кнопки нет вовсе (#65): подключаться
+                   к мёртвой подписке бессмысленно, а после #61 это самая громкая
+                   кнопка экрана. Условие считает `resolveSubscriptionCardActions`,
+                   разметка его только читает. */}
+              {cardActions.connectDevice && (
+                <ConnectDeviceButton
+                  subscription={subscription}
+                  connectedDevices={connectedDevices}
+                  className="mb-3"
+                />
+              )}
+
+              {/* ─── Действие истёкшей подписки ───
+                   ⚠️ Единственная кнопка экрана в этом состоянии: «Продлить
+                   подписку», если денег хватает, «Пополнить баланс», если нет
+                   (спека владельца #65 — «так уже есть на главной, механизм и
+                   кнопки можно взять оттуда»). Блок ОБЩИЙ с карточкой главной,
+                   второй копии нет: копии расходятся молча, со сборкой зелёной
+                   (урок #61). `PurchaseCTAButton` ниже в этом состоянии не
+                   рисует ничего — набор действий у истёкшей пуст. */}
+              {cardActions.expiredAction && (
+                <ExpiredSubscriptionAction
+                  subscription={subscription}
+                  balanceKopeks={balanceData?.balance_kopeks ?? 0}
+                  isBalanceLoading={isBalancePending}
+                  renewLabelKey={PAGE_RENEW_LABEL_KEY}
+                  className="mb-5"
+                />
+              )}
 
               {/* ─── Renewal CTA ───
                    Пара к кнопке подключения: сначала подключить, под ней продлить
                    (спека владельца #59). Компонент сам решает, что рисовать:
                    акцентное продление плюс второстепенную «Сменить тариф». Раньше
-                   он стоял СНАРУЖИ карточки, под ней. */}
-              <div className="mb-5">
-                <PurchaseCTAButton subscription={subscription} />
-              </div>
+                   он стоял СНАРУЖИ карточки, под ней.
+
+                   ⚠️ Отступ — пропом, а не обёрткой (#65): у истёкшей подписки
+                   действий нет, компонент возвращает `null`, и обёртка осталась
+                   бы пустой дырой на экране. */}
+              <PurchaseCTAButton subscription={subscription} className="mb-5" />
 
               {/* ─── Subscription URL ─── */}
               {displayedConnectionUrl && !shouldHideConnectionLink && (
@@ -1474,7 +1518,16 @@ export function SimpleSubscription() {
       )}
 
       {/* Daily Subscription Pause */}
-      {subscription && subscription.is_daily && !subscription.is_trial && (
+      {/* ⚠️ Блок не рисуется при истёкшей подписке (решение владельца от
+          19.08.2026, #65). Условие считает `resolveSubscriptionCardActions`,
+          разметка его только читает — как у двух кнопок выше.
+
+          Довод владельца не про лишнюю кнопку рядом с продлением, а про ложь:
+          строка состояния этого блока у истёкшей подписки печатает «Списания
+          активны». «Возобновить» при этом не потерялось — приостановленному
+          суточному тарифу его даёт общий блок действия веткой `resumeDaily`,
+          тем же вызовом `togglePause`. */}
+      {subscription && cardActions.dailyPause && (
         <div
           className="relative overflow-hidden rounded-3xl"
           style={{
