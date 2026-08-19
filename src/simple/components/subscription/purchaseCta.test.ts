@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  PURCHASE_ROUTE,
   isExpiredPaidSubscription,
+  paymentRoute,
   resolveSubscriptionCta,
   resolveTariffChangeOption,
   type SubscriptionCtaKind,
@@ -328,5 +330,31 @@ describe('isExpiredPaidSubscription: правило «истекла» — од�
     expect(isExpiredPaidSubscription(sub())).toBe(false);
     expect(isExpiredPaidSubscription(sub({ is_active: false, is_limited: true }))).toBe(false);
     expect(isExpiredPaidSubscription(sub({ is_active: false, is_trial: true }))).toBe(false);
+  });
+});
+
+describe('paymentRoute: адрес единого экрана оплаты (#69)', () => {
+  it('строится по идентификатору подписки', () => {
+    expect(paymentRoute(7)).toBe('/subscriptions/7/renew');
+    expect(paymentRoute(1042)).toBe('/subscriptions/1042/renew');
+  });
+
+  it('это апстримный адрес, а не новый маршрут', () => {
+    // ⚠️ Задача явно запрещает заводить третий адрес: реестр простого режима
+    // держит ровно `/subscriptions/:subscriptionId/renew`, и сторож покрытия
+    // сверяет его с `App.tsx`. Мутация «завести /subscription/pay» краснеет
+    // здесь ещё до `routes.test.tsx`.
+    expect(paymentRoute(7).startsWith('/subscriptions/')).toBe(true);
+    expect(paymentRoute(7).endsWith('/renew')).toBe(true);
+    expect(paymentRoute(7)).not.toBe(PURCHASE_ROUTE);
+  });
+
+  it('кнопка продления активной подписки строится ЭТОЙ ЖЕ функцией', () => {
+    // ⚠️ Второй вход на тот же экран — `expiredAction.ts`, ветка `openPurchase`.
+    // Совпадение адресов и есть предмет #69: два экрана оплаты владелец
+    // забраковал. Литерал вместо вызова здесь краснеет.
+    const renew = resolveSubscriptionCta(sub()).find((action) => action.kind === 'renew');
+
+    expect(renew?.to).toBe(paymentRoute(sub().id));
   });
 });

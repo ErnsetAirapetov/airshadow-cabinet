@@ -27,6 +27,10 @@
       "changeHint": "Move to a different plan",
       "dailyHint": "Charged daily — no manual renewal needed"
     },
+    "unsupportedTariff": {
+      "title": "Your plan is no longer supported",
+      "hint": "Pick another plan — payment works the same way"
+    },
     "expiredRenewAction": "Renew subscription"
   },
   "support": {

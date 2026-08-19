@@ -2,8 +2,8 @@ import type { ComponentType } from 'react';
 import { useUiMode } from '@/store/mode';
 import { SimpleBalance } from './pages/Balance';
 import { SimpleDashboard } from './pages/Dashboard';
-import { SimpleRenewSubscription } from './pages/RenewSubscription';
 import { SimpleSubscription } from './pages/Subscription';
+import { SimpleSubscriptionPayment } from './pages/SubscriptionPayment';
 import { SimpleSubscriptionPurchase } from './pages/SubscriptionPurchase';
 import { SimpleSupport } from './pages/Support';
 import { SimpleTopUpAmount } from './pages/TopUpAmount';
@@ -70,7 +70,11 @@ export const simpleRoutes: SimpleRoute[] = [
   // выше. Зонд по всем трём адресам стоит в `routes.test.tsx`.
   { path: '/subscriptions', component: SimpleSubscription },
   { path: '/subscriptions/:subscriptionId', component: SimpleSubscription },
-  { path: '/subscriptions/:subscriptionId/renew', component: SimpleRenewSubscription },
+  // ⚠️ Апстримный адрес продления отдан ЕДИНОМУ экрану оплаты (#69). Новых
+  // маршрутов задача не заводит: меняется только то, что простой режим рисует
+  // на этом адресе. Сюда ведут оба входа — «Продлить подписку» у активной и
+  // кнопка оплаты у подписки с непродлеваемым статусом.
+  { path: '/subscriptions/:subscriptionId/renew', component: SimpleSubscriptionPayment },
   // ⚠️ Литеральный путь без соседей: у `/support` в `App.tsx` нет ни дочерних
   // маршрутов, ни записей-параметров рядом, так что `UPSTREAM_LITERAL_PATHS`
   // этот адрес не касается. Переход из колокольчика `/support?ticket=<id>` —

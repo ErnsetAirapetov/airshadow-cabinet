@@ -567,7 +567,12 @@ describe('копия правила адреса не разошлась с purc
   });
 
   it('адрес продления собирается из id подписки', () => {
-    expect(source).toContain('/subscriptions/${subscription.id}/renew');
+    // ⚠️ С #69 адрес строит `paymentRoute`: на него же ведёт кнопка оплаты
+    // непродлеваемой подписки (`expiredAction.ts`), и литерал в двух местах
+    // разъехался бы молча. Сторож смотрит на обе половины — и на объявление
+    // адреса, и на то, что кнопка продления зовёт именно её.
+    expect(source).toContain('return `/subscriptions/${subscriptionId}/renew`;');
+    expect(source).toContain('to: paymentRoute(subscription.id)');
   });
 
   it('ветки триала, суточного тарифа и отсутствия id никуда не делись', () => {
