@@ -16,6 +16,7 @@ import {
   resolveExpiredActionLabelKey,
   resolveExpiredRenewOperation,
 } from './expiredAction';
+import { PURCHASE_ROUTE, paymentRoute } from './purchaseCta';
 import type { Subscription } from '@/types';
 
 /**
@@ -191,7 +192,12 @@ describe('resolveExpiredRenewOperation: чем именно продлеваем
     // не годится — `togglePause` это механизм суточного тарифа.
     const disabled = sub({ status: 'disabled' });
 
-    expect(resolveExpiredRenewOperation(disabled)).toEqual({ kind: 'openPurchase' });
+    // ⚠️ С #69 переход ведёт не в витрину, а на ЕДИНЫЙ экран оплаты той же
+    // подписки: `id` подписки здесь `7`, значит `/subscriptions/7/renew`.
+    expect(resolveExpiredRenewOperation(disabled)).toEqual({
+      kind: 'openPurchase',
+      to: '/subscriptions/7/renew',
+    });
   });
 
   it('статус pending закрыт тем же правилом', () => {
@@ -199,14 +205,39 @@ describe('resolveExpiredRenewOperation: чем именно продлеваем
     // под `disabled`, краснеет здесь.
     expect(resolveExpiredRenewOperation(sub({ status: 'pending' }))).toEqual({
       kind: 'openPurchase',
+      to: '/subscriptions/7/renew',
     });
   });
 
+  it('адрес перехода — ТОТ ЖЕ, что у кнопки продления активной подписки (#69)', () => {
+    // ⚠️ Сердце #69 в этом модуле. Владелец забраковал ровно то, что оплата
+    // открывалась на двух разных экранах; мутация «вернуть здесь витрину»
+    // краснеет здесь, а не на стенде, где состояние `disabled` воспроизвести
+    // нечем.
+    const disabled = sub({ status: 'disabled' });
+    const operation = resolveExpiredRenewOperation(disabled);
+
+    expect(operation.kind).toBe('openPurchase');
+    expect(operation).toHaveProperty('to', paymentRoute(disabled.id));
+    expect(operation).not.toHaveProperty('to', PURCHASE_ROUTE);
+  });
+
+  it('без id подписки адрес оплаты собрать нечем — остаётся витрина (#69)', () => {
+    // Страховка того же рода, что в `resolveAllSubscriptionActions`: `id`
+    // приходит от API, и нулевой он означает «строки нет». Ссылка
+    // `/subscriptions/0/renew` вела бы в никуда.
+    const operation = resolveExpiredRenewOperation(sub({ status: 'pending', id: 0 }));
+
+    expect(operation).toEqual({ kind: 'openPurchase', to: PURCHASE_ROUTE });
+  });
+
   it('у навигационной операции нет ни дней, ни тарифа', () => {
-    // ⚠️ Витрина — это переход, а не мутация: полей, которыми разметка могла бы
-    // позвать продление или покупку, у этого вида операции не существует.
-    expect(Object.keys(resolveExpiredRenewOperation(sub({ status: 'disabled' })))).toEqual([
+    // ⚠️ Переход — это не мутация: полей, которыми разметка могла бы позвать
+    // продление или покупку, у этого вида операции не существует. Адрес (#69) —
+    // единственное, что к нему добавилось, и он тоже не мутация.
+    expect(Object.keys(resolveExpiredRenewOperation(sub({ status: 'disabled' }))).sort()).toEqual([
       'kind',
+      'to',
     ]);
   });
 
@@ -382,19 +413,27 @@ describe('resolveExpiredActionLabelKey: подпись кнопки продле
     // (`resolveAllSubscriptionActions`, ветка истёкшей подписки). Своей строки
     // задача не заводит: формулировка уже согласована владельцем и переведена.
     expect(PURCHASE_LABEL_KEY).toBe('subscription.getSubscription');
-    expect(resolveExpiredActionLabelKey({ kind: 'openPurchase' })).toBe(PURCHASE_LABEL_KEY);
+    expect(
+      resolveExpiredActionLabelKey({ kind: 'openPurchase', to: '/subscriptions/7/renew' }),
+    ).toBe(PURCHASE_LABEL_KEY);
   });
 
   it('подпись витрины подменой ключа не перебивается', () => {
     // ⚠️ Та же причина, что у «Возобновить»: продлением этот переход не
     // является. «Продлить подписку» на кнопке, ведущей в витрину, обещало бы
     // продление, которое бэкенд этой подписке запретил.
-    expect(resolveExpiredActionLabelKey({ kind: 'openPurchase' }, PAGE_RENEW_LABEL_KEY)).toBe(
-      PURCHASE_LABEL_KEY,
-    );
-    expect(resolveExpiredActionLabelKey({ kind: 'openPurchase' }, DEFAULT_RENEW_LABEL_KEY)).toBe(
-      PURCHASE_LABEL_KEY,
-    );
+    expect(
+      resolveExpiredActionLabelKey(
+        { kind: 'openPurchase', to: '/subscriptions/7/renew' },
+        PAGE_RENEW_LABEL_KEY,
+      ),
+    ).toBe(PURCHASE_LABEL_KEY);
+    expect(
+      resolveExpiredActionLabelKey(
+        { kind: 'openPurchase', to: '/subscriptions/7/renew' },
+        DEFAULT_RENEW_LABEL_KEY,
+      ),
+    ).toBe(PURCHASE_LABEL_KEY);
   });
 
   it('подпись «Возобновить» подменой не перебивается', () => {
@@ -456,7 +495,7 @@ describe('resolveExpiredActionButton: что рисует единственна
     // Заглушка на время запроса баланса здесь тоже не нужна: решение про эту
     // кнопку баланса не спрашивает вовсе. Мутация «сначала смотреть на баланс»
     // краснеет здесь трижды.
-    const operation = { kind: 'openPurchase' } as const;
+    const operation = { kind: 'openPurchase', to: '/subscriptions/7/renew' } as const;
 
     expect(
       resolveExpiredActionButton({ operation, action: 'topUp', isBalanceLoading: false }),
@@ -556,8 +595,10 @@ describe('обе подписи резолвятся в текст, а не в �
     // ⚠️ Ключ апстримный, без префикса `simple:` — и он обязан находиться. Без
     // этой проверки опечатка в ключе напечатала бы на кнопке сам ключ, молча и
     // при зелёной сборке.
-    expect(instance().t(resolveExpiredActionLabelKey({ kind: 'openPurchase' }))).toBe(
-      'Оформить подписку',
-    );
+    expect(
+      instance().t(
+        resolveExpiredActionLabelKey({ kind: 'openPurchase', to: '/subscriptions/7/renew' }),
+      ),
+    ).toBe('Оформить подписку');
   });
 });

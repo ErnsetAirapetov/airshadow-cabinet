@@ -1,4 +1,5 @@
 import type { Subscription } from '@/types';
+import { PURCHASE_ROUTE, paymentRoute } from './purchaseCta';
 
 /**
  * Чистая логика единственной кнопки истёкшей платной подписки (задача #65).
@@ -100,11 +101,18 @@ export type ExpiredRenewOperation =
   | { kind: 'purchaseDailyTariff'; tariffId: number; days: number }
   | { kind: 'renewSubscription'; days: number }
   /**
-   * Продление бэкендом запрещено — остаётся витрина (#67). Вид НАВИГАЦИОННЫЙ:
+   * Продление бэкендом запрещено — остаётся переход (#67). Вид НАВИГАЦИОННЫЙ:
    * ни дней, ни тарифа у него нет, потому что мутации здесь не происходит
    * вовсе, и разметка не может позвать её по недосмотру.
+   *
+   * ⚠️ С #69 адрес приехал В САМУ ОПЕРАЦИЮ, а не остался литералом в разметке.
+   * Прежде кнопка вела в витрину (`PURCHASE_ROUTE`), и владелец забраковал
+   * именно это: у человека с непродлеваемым статусом оплата открывалась не там,
+   * где у всех остальных. Теперь она ведёт на ЕДИНЫЙ экран оплаты
+   * (`paymentRoute(subscription.id)`), а витрина остаётся страховкой для
+   * подписки без `id` — собрать её адрес нечем.
    */
-  | { kind: 'openPurchase' };
+  | { kind: 'openPurchase'; to: string };
 
 /**
  * ⚠️ Четыре ветки — не украшение, каждая лечит свой отказ бэкенда:
@@ -171,7 +179,14 @@ export function resolveExpiredRenewOperation(subscription: Subscription): Expire
   }
 
   if (isNonRenewableStatus(subscription)) {
-    return { kind: 'openPurchase' };
+    // ⚠️ Адрес считается ЗДЕСЬ, а не в разметке (#69): единый экран оплаты
+    // строится по `subscription.id`, и копия литерала в блоке разъехалась бы с
+    // кнопкой продления активной подписки — обе ведут на один и тот же адрес.
+    // Без `id` собрать его нечем, и остаётся прежняя витрина.
+    return {
+      kind: 'openPurchase',
+      to: subscription.id ? paymentRoute(subscription.id) : PURCHASE_ROUTE,
+    };
   }
 
   return { kind: 'renewSubscription', days: RENEW_PERIOD_DAYS };

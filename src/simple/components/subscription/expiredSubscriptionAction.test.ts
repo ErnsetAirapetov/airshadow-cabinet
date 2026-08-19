@@ -227,7 +227,7 @@ describe('непродлеваемый статус: переход в витр�
     expect(action).toContain("button === 'purchase'");
     // Перенос строки внутри тега ставит prettier — сторож смотрит на связку
     // «ссылка + адрес», а не на раскладку.
-    expect(action).toMatch(/<Link\s+to=\{PURCHASE_ROUTE\}/);
+    expect(action).toMatch(/<Link\s+to=\{operation\.to\}/);
   });
 
   it('ветка витрины стоит ПЕРВОЙ — раньше заглушки, продления и пополнения', () => {
@@ -244,12 +244,21 @@ describe('непродлеваемый статус: переход в витр�
     expect(purchase).toBeLessThan(action.indexOf('onClick={handleTopUp}'));
   });
 
-  it('адрес витрины приходит из общего модуля, а не литералом в блоке', () => {
-    // ⚠️ Четвёртая копия литерала разъехалась бы с остальными молча. Пара
-    // «разбор удался» — сам адрес, объявленный в `purchaseCta`.
-    expect(action).toContain("import { PURCHASE_ROUTE } from './purchaseCta'");
-    expect(purchaseCta).toContain("export const PURCHASE_ROUTE = '/subscription/purchase'");
+  it('адрес перехода приходит ОПЕРАЦИЕЙ, а не литералом в блоке (#69)', () => {
+    // ⚠️ Копия литерала разъехалась бы с правилом молча. С #69 адрес считает
+    // `resolveExpiredRenewOperation` — тот же единый экран оплаты, что у кнопки
+    // продления активной подписки. Мутация «вернуть в разметку витрину»
+    // краснеет здесь: на стенде это состояние воспроизвести нечем.
     expect(action).not.toContain("'/subscription/purchase'");
+    expect(action).not.toContain('PURCHASE_ROUTE');
+    expect(action).not.toContain('/renew');
+
+    // Пары «разбор удался»: оба адреса объявлены в общем модуле, и оба
+    // достаются операции, а не разметке.
+    expect(purchaseCta).toContain("export const PURCHASE_ROUTE = '/subscription/purchase'");
+    expect(purchaseCta).toContain('export function paymentRoute(');
+    expect(actionState).toContain("import { PURCHASE_ROUTE, paymentRoute } from './purchaseCta'");
+    expect(actionState).toContain('paymentRoute(subscription.id)');
   });
 
   it('подпись кнопки витрины берётся правилом, а не пишется в разметке', () => {

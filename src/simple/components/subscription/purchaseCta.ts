@@ -32,6 +32,25 @@ export interface SubscriptionCtaAction {
  */
 export const PURCHASE_ROUTE = '/subscription/purchase';
 
+/**
+ * Адрес ЕДИНОГО экрана оплаты подписки (#69).
+ *
+ * ⚠️ Адрес апстримный и остался прежним — новых маршрутов задача не заводит.
+ * Изменилось то, что простой режим на нём рисует: не «продление», а оплату
+ * подписки вообще. Продлеваемый статус платит продлением, `disabled`/`pending`
+ * — покупкой своего тарифа, отвалившийся тариф уводит в сетку выбора. Разбор —
+ * `pages/paymentState.ts`.
+ *
+ * ⚠️ Функция, а не литерал в двух местах: сюда ведут ОБА входа — кнопка
+ * продления активной подписки (`resolveAllSubscriptionActions` ниже) и кнопка
+ * непродлеваемой (`expiredAction.ts`, ветка `openPurchase`). До #69 второй вход
+ * вёл в витрину, и владелец забраковал ровно это расхождение; две копии
+ * литерала повторили бы его молча.
+ */
+export function paymentRoute(subscriptionId: number): string {
+  return `/subscriptions/${subscriptionId}/renew`;
+}
+
 const CHANGE_TARIFF: Omit<SubscriptionCtaAction, 'hintKey'> = {
   kind: 'change',
   to: PURCHASE_ROUTE,
@@ -130,7 +149,7 @@ function resolveAllSubscriptionActions(subscription: Subscription | null): Subsc
   return [
     {
       kind: 'renew',
-      to: `/subscriptions/${subscription.id}/renew`,
+      to: paymentRoute(subscription.id),
       tone: 'accent',
       labelKey: 'subscription.extend',
       hintKey: 'subscription.cta.renewHint',

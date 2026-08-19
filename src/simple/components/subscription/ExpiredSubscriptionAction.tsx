@@ -9,7 +9,6 @@ import { useHapticFeedback } from '@/platform/hooks/useHaptic';
 import { getInsufficientBalanceError } from '@/utils/subscriptionHelpers';
 import type { Subscription } from '@/types';
 import { resolveExpiredCardAction } from '../../pages/dashboardState';
-import { PURCHASE_ROUTE } from './purchaseCta';
 import {
   DEFAULT_RENEW_LABEL_KEY,
   hasBalanceForRenew,
@@ -206,15 +205,19 @@ export function ExpiredSubscriptionAction({
       )}
 
       <div className="flex gap-2.5">
-        {button === 'purchase' ? (
+        {button === 'purchase' && operation.kind === 'openPurchase' ? (
           // ⚠️ Продление этой подписке запретил бэкенд (#67): статус входит в
           // `NON_RENEWABLE_STATUSES`, и эндпоинт продления отвечает на неё 400.
-          // Поэтому здесь ПЕРЕХОД, а не мутация — витрина для такого статуса
-          // работает, и до #65 страница подписки вела ровно туда. Кнопки
-          // «Пополнить баланс» у этой ветки нет намеренно: продлить с пополненного
-          // счёта всё равно нельзя, это тупик.
+          // Поэтому здесь ПЕРЕХОД, а не мутация. Кнопки «Пополнить баланс» у
+          // этой ветки нет намеренно: продлить с пополненного счёта всё равно
+          // нельзя, это тупик.
+          //
+          // ⚠️ Адрес приходит ИЗ ОПЕРАЦИИ (#69) — тот же единый экран оплаты,
+          // куда ведёт «Продлить подписку» у активной. До #69 здесь стоял
+          // литерал витрины, и владелец забраковал именно это расхождение.
+          // Своего литерала у разметки нет: он разъехался бы молча.
           <Link
-            to={PURCHASE_ROUTE}
+            to={operation.to}
             className={ACTION_BUTTON_CLASS}
             style={{ background: ACCENT_GRADIENT, boxShadow: ACCENT_SHADOW }}
           >
