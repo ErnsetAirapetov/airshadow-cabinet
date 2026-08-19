@@ -20,9 +20,19 @@
     }
   },
   "subscription": {
+    "cta": {
+      "expiredHint": "Choose a plan and pay",
+      "trialHint": "More traffic and devices",
+      "renewHint": "Pay for the current plan for a new term",
+      "changeHint": "Move to a different plan",
+      "dailyHint": "Charged daily — no manual renewal needed"
+    },
     "expiredRenewAction": "Renew subscription"
   },
   "support": {
+    "newTicket": "Ask a question",
+    "yourTickets": "Requests",
+    "selectTicket": "Select a request or ask a new question",
     "faqLinkTitle": "Frequently asked questions",
     "faqLinkHint": "Your answer may already be there — check before opening a ticket"
   }

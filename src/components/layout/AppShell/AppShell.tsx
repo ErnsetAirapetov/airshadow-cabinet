@@ -35,7 +35,7 @@ import {
   GiftIcon,
   HomeIcon,
   CreditCardIcon,
-  SupportIcon,
+  ChatIcon,
   UserIcon,
   UsersIcon,
   ShieldIcon,
@@ -131,7 +131,7 @@ export function AppShell({ children }: AppShellProps) {
     { path: '/balance', label: t('nav.balance'), icon: CreditCardIcon },
     ...(referralEnabled ? [{ path: '/referral', label: t('nav.referral'), icon: UsersIcon }] : []),
     ...(giftEnabled ? [{ path: '/gift', label: t('nav.gift'), icon: GiftIcon }] : []),
-    { path: '/support', label: t('nav.support'), icon: SupportIcon },
+    { path: '/support', label: t('nav.support'), icon: ChatIcon },
     { path: '/info', label: t('nav.info'), icon: InfoIcon },
     { path: '/profile', label: t('nav.profile'), icon: UserIcon },
   ];

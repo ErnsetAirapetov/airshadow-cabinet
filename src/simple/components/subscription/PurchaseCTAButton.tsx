@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { HoverBorderGradient } from '@/components/ui/hover-border-gradient';
 import { AdjustmentsIcon, ChevronRightIcon, SubscriptionIcon } from '@/components/icons';
 import { resolveSubscriptionCta, type SubscriptionCtaAction } from './purchaseCta';
+import { SIMPLE_NS } from '../../i18n';
 import type { Subscription } from '@/types';
 
 interface PurchaseCTAButtonProps {
@@ -32,6 +33,16 @@ interface PurchaseCTAButtonProps {
  * действий обязана читаться как пара. Пороги и иерархию сторожит
  * `purchaseCtaButton.test.ts`, там же записано, почему сравнение идёт с живой
  * выдачей `resolveConnectButtonAccent`, а не с числом.
+ *
+ * ⚠️ Переводчика здесь два, и это не небрежность (#33). Заголовки (`labelKey`)
+ * — апстримные ключи, которых мы не касались, и читаются апстримным `t`.
+ * Подписи (`hintKey`) — наши: апстримный `subscription.cta.renewHint` говорит
+ * «подписка истекла, продлите», а нам под кнопкой продления нужно «оплатить
+ * текущий тариф на новый срок», и ещё двух подписей (`changeHint`, `dailyHint`)
+ * в апстриме нет вовсе. Пока они лежали в `src/locales/*.json`, откатить те
+ * файлы к апстриму было нельзя; после переезда в `src/simple/locales/` — можно,
+ * и они читаются `tSimple`. Сторож — `src/simple/upstreamLocalesDrift.test.ts`:
+ * ключ приходит переменной, и общий сторож неймспейса его не видит.
  */
 export default function PurchaseCTAButton({
   subscription,
@@ -56,6 +67,7 @@ export default function PurchaseCTAButton({
 
 function PrimaryAction({ action }: { action: SubscriptionCtaAction }) {
   const { t } = useTranslation();
+  const { t: tSimple } = useTranslation(SIMPLE_NS);
   const isCritical = action.tone === 'critical';
   const accentColor = isCritical
     ? 'rgb(var(--color-critical-500))'
@@ -104,7 +116,7 @@ function PrimaryAction({ action }: { action: SubscriptionCtaAction }) {
             </div>
             <div>
               <div className="text-[15px] font-semibold text-dark-50">{t(action.labelKey)}</div>
-              <div className="text-[12px] text-dark-50/40">{t(action.hintKey)}</div>
+              <div className="text-[12px] text-dark-50/40">{tSimple(action.hintKey)}</div>
             </div>
           </div>
 
@@ -118,6 +130,7 @@ function PrimaryAction({ action }: { action: SubscriptionCtaAction }) {
 
 function SecondaryAction({ action }: { action: SubscriptionCtaAction }) {
   const { t } = useTranslation();
+  const { t: tSimple } = useTranslation(SIMPLE_NS);
 
   return (
     <Link to={action.to} className="block">
@@ -129,7 +142,7 @@ function SecondaryAction({ action }: { action: SubscriptionCtaAction }) {
           </div>
           <div>
             <div className="text-[14px] font-medium text-dark-50/80">{t(action.labelKey)}</div>
-            <div className="text-[12px] text-dark-50/35">{t(action.hintKey)}</div>
+            <div className="text-[12px] text-dark-50/35">{tSimple(action.hintKey)}</div>
           </div>
         </div>
 
