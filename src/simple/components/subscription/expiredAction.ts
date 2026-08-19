@@ -64,6 +64,32 @@ export function isPausedDailySubscription(subscription: Subscription): boolean {
 }
 
 /**
+ * Статусы, при которых бэкенд ОТКАЗЫВАЕТ продлевать подписку, — копия множества
+ * `_non_renewable` из репозитория бота (задача #67).
+ *
+ * ⚠️ ИСТОЧНИК, а не догадка: `remnawave-bedolaga-telegram-bot`,
+ * `app/cabinet/routes/subscription_modules/renewal.py:130-136` —
+ * `_non_renewable = {SubscriptionStatus.DISABLED.value, SubscriptionStatus.PENDING.value}`,
+ * и при совпадении эндпоинт продления отвечает 400 с текстом
+ * `Cannot renew subscription with status: <статус>`. Отказ намеренный и явный,
+ * то есть чинить его надо на нашей стороне, а не обходить повтором запроса.
+ *
+ * ⚠️ Сверять по полю `status` МОЖНО ТОЧНО, гадать не нужно: в ответе API это
+ * поле — `actual_status` (`subscription_modules/helpers.py:205`), ровно то
+ * значение, по которому бэкенд и проверяет.
+ *
+ * ⚠️ Список ОДИН и записан здесь целиком. Условие «только про `disabled`»
+ * (симптом, с которым задача заведена) выглядело бы работающим ровно до первой
+ * подписки в `pending` — она сломалась бы точно так же, просто позже.
+ */
+export const NON_RENEWABLE_STATUSES = ['disabled', 'pending'] as const;
+
+/** Продление этой подписке бэкенд запретил — см. `NON_RENEWABLE_STATUSES`. */
+export function isNonRenewableStatus(subscription: Subscription): boolean {
+  return (NON_RENEWABLE_STATUSES as readonly string[]).includes(subscription.status);
+}
+
+/**
  * Чем именно продлевается подписка при нажатии кнопки.
  *
  * Размеченное объединение, а не три флага: у ветки «снять с паузы» нет ни
@@ -72,20 +98,44 @@ export function isPausedDailySubscription(subscription: Subscription): boolean {
 export type ExpiredRenewOperation =
   | { kind: 'resumeDaily' }
   | { kind: 'purchaseDailyTariff'; tariffId: number; days: number }
-  | { kind: 'renewSubscription'; days: number };
+  | { kind: 'renewSubscription'; days: number }
+  /**
+   * Продление бэкендом запрещено — остаётся витрина (#67). Вид НАВИГАЦИОННЫЙ:
+   * ни дней, ни тарифа у него нет, потому что мутации здесь не происходит
+   * вовсе, и разметка не может позвать её по недосмотру.
+   */
+  | { kind: 'openPurchase' };
 
 /**
- * ⚠️ Три ветки — не украшение, каждая лечит свой отказ бэкенда:
+ * ⚠️ Четыре ветки — не украшение, каждая лечит свой отказ бэкенда:
  *
  * - приостановленный суточный тариф (`status === 'disabled'`) снимается с
  *   паузы; покупка тарифа поверх дала бы «Тариф уже активен» и возврат средств;
  * - истёкший суточный покупается на один день, и `subscription.id` в запросе
  *   обязателен — иначе бэкенд ищет строку по `(user_id, tariff_id)` и
  *   проигрывает гонку с вебхуками панели;
+ * - подписке с непродлеваемым статусом (`NON_RENEWABLE_STATUSES`) остаётся
+ *   витрина: продление ей бэкенд запретил (#67);
  * - у всего остального продление периодом.
  *
- * Суточный без `tariff_id` покупать нечем, поэтому он уходит в обычное
- * продление, а не остаётся без действия.
+ * Суточный без `tariff_id` покупать нечем, поэтому он уходит дальше по цепочке
+ * — в витрину или в обычное продление, но без действия не остаётся.
+ *
+ * ⚠️ ПОРЯДОК ВЕТОК ЗДЕСЬ — ЧАСТЬ ПРАВИЛА, и обе перестановки ломают экран.
+ *
+ * Витрина стоит НИЖЕ обеих суточных веток. Выше — сломала бы приостановленный
+ * суточный тариф: у него статус тоже `disabled`, но `togglePause` для него
+ * бэкендом разрешён и проверен (#65), и человек, всего лишь остановивший
+ * списания, уезжал бы покупать тариф заново. Ниже покупки дня — потому что
+ * запрет из `renewal.py` относится к ЭНДПОИНТУ ПРОДЛЕНИЯ и только к нему: у
+ * `purchase-tariff` (`purchase.py`) множества `_non_renewable` нет вовсе, статус
+ * `disabled` там рядовое состояние, и именно этот путь возвращает суточную
+ * подписку в строй (#65). Расширять чужой запрет на соседний эндпоинт значило бы
+ * отобрать у суточного тарифа рабочее действие ради симметрии.
+ *
+ * Витрина стоит ВЫШЕ продления периодом — ради этого задача и заведена: не
+ * суточная подписка со статусом `disabled` проваливалась в последнюю ветку и
+ * получала 400.
  *
  * ⚠️ ПРО `is_daily_paused` У ИСТЁКШЕЙ ПОДПИСКИ — вопрос закрыт, пересматривать
  * не нужно. Ветка `purchaseDailyTariff` достаётся и суточной подписке с
@@ -120,11 +170,19 @@ export function resolveExpiredRenewOperation(subscription: Subscription): Expire
     };
   }
 
+  if (isNonRenewableStatus(subscription)) {
+    return { kind: 'openPurchase' };
+  }
+
   return { kind: 'renewSubscription', days: RENEW_PERIOD_DAYS };
 }
 
 /**
  * Что рисует единственная кнопка блока.
+ *
+ * `purchase` — переход в витрину у подписки, которую бэкенд продлевать
+ * отказывается (#67). Это единственное значение, при котором кнопка вообще не
+ * мутация: ни денег, ни попытки продления за ней нет.
  *
  * `pending` — баланс ещё не пришёл. Это не косметика: пока запрос в полёте,
  * баланс равен нулю, грубая проверка «денег хватает» отвечает «нет», и на
@@ -143,17 +201,26 @@ export function resolveExpiredRenewOperation(subscription: Subscription): Expire
  * баланса отдельно от кнопки, и это спека владельца, а не догадка исполнителя;
  * вопрос вынесен в MR отдельным пунктом.
  */
-export type ExpiredActionButton = 'pending' | 'renew' | 'topUp';
+export type ExpiredActionButton = 'pending' | 'renew' | 'topUp' | 'purchase';
 
 export function resolveExpiredActionButton({
+  operation,
   action,
   isBalanceLoading,
 }: {
+  /** Чем продлеваем — `resolveExpiredRenewOperation`. */
+  operation: ExpiredRenewOperation;
   /** Решение `resolveExpiredCardAction`: продлить или пополнить. */
   action: 'renew' | 'topUp';
   /** Запрос баланса ещё идёт — решение выше принято по нулю, а не по данным. */
   isBalanceLoading: boolean;
 }): ExpiredActionButton {
+  // ⚠️ Переход в витрину решается ПЕРВЫМ и баланса не спрашивает вовсе (#67).
+  // «Пополнить баланс» у непродлеваемой подписки — тупик: продлить оттуда всё
+  // равно нельзя, деньги просто уедут на счёт. Заглушка на время запроса
+  // баланса здесь тоже ни к чему: ждать нечего, ответ от баланса не зависит.
+  if (operation.kind === 'openPurchase') return 'purchase';
+
   if (isBalanceLoading) return 'pending';
 
   return action;
@@ -179,18 +246,42 @@ export const DEFAULT_RENEW_LABEL_KEY = 'dashboard.expired.quickRenew';
 export const PAGE_RENEW_LABEL_KEY = 'simple:subscription.expiredRenewAction';
 
 /**
- * Подпись кнопки: снятие с паузы — «Возобновить», остальное — «Продлить».
+ * «Оформить подписку» — подпись перехода в витрину (#67).
+ *
+ * ⚠️ Ключ АПСТРИМНЫЙ и ровно тот, что стоял на этой кнопке до #65
+ * (`purchaseCta.ts`, прежняя ветка истёкшей подписки). Своей строки задача не
+ * заводит: формулировка уже согласована владельцем и переведена на оба языка.
+ */
+export const PURCHASE_LABEL_KEY = 'subscription.getSubscription';
+
+/**
+ * Подписи, которые местом вызова НЕ подменяются: они говорят не про продление.
+ *
+ * ⚠️ Таблицей, а не цепочкой тернарников: вид операции здесь ровно один раз
+ * сопоставлен со своей подписью, и новая ветка операции без подписи не
+ * потеряется молча — она просто не попадёт сюда и получит `renewLabelKey`,
+ * что видно перебором в тестах.
+ */
+const FIXED_LABEL_KEYS: Partial<Record<ExpiredRenewOperation['kind'], string>> = {
+  resumeDaily: 'dashboard.suspended.resume',
+  openPurchase: PURCHASE_LABEL_KEY,
+};
+
+/**
+ * Подпись кнопки: снятие с паузы — «Возобновить», витрина — «Оформить
+ * подписку», остальное — «Продлить».
  *
  * ⚠️ `renewLabelKey` — способ развести подписи ДВУХ мест вызова, не разводя сам
  * блок: место вызова передаёт свой ключ, ветки «на главной / на странице» внутри
  * блока нет. Ровно так же у общей кнопки подключения разведён `className` (#61).
  *
- * ⚠️ На снятие с паузы подмена НЕ действует: списания всего лишь остановлены,
- * там «Возобновить», и «Продлить подписку» на этой кнопке врало бы.
+ * ⚠️ На снятие с паузы и на витрину подмена НЕ действует: в первом случае
+ * списания всего лишь остановлены, во втором продление бэкендом запрещено, и
+ * «Продлить подписку» на такой кнопке обещало бы ровно то, что не работает.
  */
 export function resolveExpiredActionLabelKey(
   operation: ExpiredRenewOperation,
   renewLabelKey: string = DEFAULT_RENEW_LABEL_KEY,
 ): string {
-  return operation.kind === 'resumeDaily' ? 'dashboard.suspended.resume' : renewLabelKey;
+  return FIXED_LABEL_KEYS[operation.kind] ?? renewLabelKey;
 }

@@ -38,6 +38,8 @@ const PAGE = 'src/simple/pages/Subscription.tsx';
 const UPSTREAM_CARD = 'src/components/dashboard/SubscriptionCardExpired.tsx';
 /** Общий запрос баланса простого режима — там живёт связка «ключ + queryFn». */
 const BALANCE_WIDGET = 'src/simple/components/BalanceWidget.tsx';
+/** Адрес витрины живёт здесь — блок берёт его оттуда, а не пишет литералом. */
+const PURCHASE_CTA = 'src/simple/components/subscription/purchaseCta.ts';
 
 function read(path: string): string {
   return existsSync(path) ? readFileSync(path, 'utf8') : '';
@@ -54,6 +56,7 @@ const card = stripComments(read(EXPIRED_CARD));
 const page = stripComments(read(PAGE));
 const upstream = stripComments(read(UPSTREAM_CARD));
 const balanceWidget = stripComments(read(BALANCE_WIDGET));
+const purchaseCta = stripComments(read(PURCHASE_CTA));
 
 /** Сколько раз в тексте встречается подстрока. */
 function countOf(source: string, needle: string): number {
@@ -204,6 +207,59 @@ describe('отказ по нехватке средств перебивает �
   });
 });
 
+describe('непродлеваемый статус: переход в витрину, а не мутация (#67)', () => {
+  it('разбор удался — источник запрета назван в чистом модуле, с файлом и строками', () => {
+    // ⚠️ Список статусов сверяется с реальностью НЕ НА ВЕРУ: в докстринге
+    // константы стоит ссылка на код бэкенда, по которому её можно перепроверить
+    // через полгода. Читается СЫРОЙ текст — в `actionState` комментарии вырезаны.
+    const raw = read(ACTION_STATE);
+
+    expect(raw.length).toBeGreaterThan(500);
+    expect(raw).toContain('renewal.py:130-136');
+    expect(raw).toContain('helpers.py:205');
+    // Пара: сама константа — код, а не проза докстринга.
+    expect(actionState).toContain('export const NON_RENEWABLE_STATUSES');
+  });
+
+  it('у кнопки витрины есть своя ветка, и она не зовёт мутацию', () => {
+    // ⚠️ Мутация «отдать этому состоянию обычную кнопку продления» краснеет
+    // здесь: бэкенд отвечает на такое продление 400 (задача #67).
+    expect(action).toContain("button === 'purchase'");
+    // Перенос строки внутри тега ставит prettier — сторож смотрит на связку
+    // «ссылка + адрес», а не на раскладку.
+    expect(action).toMatch(/<Link\s+to=\{PURCHASE_ROUTE\}/);
+  });
+
+  it('ветка витрины стоит ПЕРВОЙ — раньше заглушки, продления и пополнения', () => {
+    // ⚠️ Порядок веток разметки повторяет порядок правила: решение про витрину
+    // баланса не спрашивает вовсе. Перестановка ниже заглушки вернула бы
+    // человеку с непродлеваемой подпиской спиннер вместо действия.
+    const purchase = action.indexOf("button === 'purchase'");
+    const pending = action.indexOf("button === 'pending'");
+
+    expect(purchase).toBeGreaterThan(-1);
+    expect(pending).toBeGreaterThan(-1);
+    expect(purchase).toBeLessThan(pending);
+    expect(purchase).toBeLessThan(action.indexOf('onClick={handleRenew}'));
+    expect(purchase).toBeLessThan(action.indexOf('onClick={handleTopUp}'));
+  });
+
+  it('адрес витрины приходит из общего модуля, а не литералом в блоке', () => {
+    // ⚠️ Четвёртая копия литерала разъехалась бы с остальными молча. Пара
+    // «разбор удался» — сам адрес, объявленный в `purchaseCta`.
+    expect(action).toContain("import { PURCHASE_ROUTE } from './purchaseCta'");
+    expect(purchaseCta).toContain("export const PURCHASE_ROUTE = '/subscription/purchase'");
+    expect(action).not.toContain("'/subscription/purchase'");
+  });
+
+  it('подпись кнопки витрины берётся правилом, а не пишется в разметке', () => {
+    // Ключ один на два экрана и подменой места вызова не перебивается —
+    // проверено вызовом функции в `expiredAction.test.ts`.
+    expect(actionState).toContain('PURCHASE_LABEL_KEY');
+    expect(action).not.toContain('subscription.getSubscription');
+  });
+});
+
 describe('различия мест вызова — пропами, а не ветками внутри (#65, урок #61)', () => {
   it('внешний отступ приходит пропом и применяется к корню блока', () => {
     // ⚠️ Мутация «зашить отступ в блок» краснеет здесь: на главной блок стоит
@@ -285,7 +341,7 @@ describe('страница подписки: одно действие у ист
     // ⚠️ Решение по нулевому балансу показывать нельзя: 200–400 мс единственной
     // кнопкой экрана было бы «Пополнить баланс», и человек с деньгами успевает
     // её нажать. Правило — в чистом модуле, разметка читает его результат.
-    expect(action).toContain('resolveExpiredActionButton({ action, isBalanceLoading })');
+    expect(action).toContain('resolveExpiredActionButton({ operation, action, isBalanceLoading })');
     expect(action).toContain("button === 'pending'");
     expect(page).toContain('isBalanceLoading={isBalancePending}');
     // На главной сумма баланса стоит рядом с кнопкой, флаг там не нужен, и
