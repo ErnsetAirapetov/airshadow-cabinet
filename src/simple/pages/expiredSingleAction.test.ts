@@ -169,7 +169,10 @@ for (const isActive of [true, false]) {
     for (const isTrial of [true, false]) {
       for (const isDaily of [true, false]) {
         for (const id of [7, 0]) {
-          for (const status of ['active', 'expired', 'disabled']) {
+          // ⚠️ `pending` — вторая половина множества непродлеваемых статусов
+          // бэкенда (#67, `renewal.py:130-136`). Без него перебор проверял бы
+          // страницу только на том статусе, о котором владелец сообщил.
+          for (const status of ['active', 'expired', 'disabled', 'pending']) {
             for (const dailyPrice of [0, 1500]) {
               // ⚠️ `is_daily_paused` — отдельное измерение, а не мелочь: блок
               // паузы называет кнопку «Возобновить» по нему ИЛИ по статусу
@@ -213,6 +216,54 @@ describe('разбор удался', () => {
     expect(expired.some(({ subscription }) => subscription.is_daily)).toBe(true);
     expect(expired.some(({ subscription }) => subscription.status === 'disabled')).toBe(true);
     expect(expired.some(({ subscription }) => !subscription.id)).toBe(true);
+  });
+
+  it('в переборе есть оба непродлеваемых статуса (#67)', () => {
+    // Пара «разбор удался» к проверке ниже: без таких состояний она проходила
+    // бы ни на чём.
+    const expired = STATES.filter(({ subscription }) => isExpiredPaid(subscription));
+
+    expect(expired.some(({ subscription }) => subscription.status === 'disabled')).toBe(true);
+    expect(expired.some(({ subscription }) => subscription.status === 'pending')).toBe(true);
+  });
+});
+
+describe('непродлеваемый статус: экран даёт переход, а не продление (#67)', () => {
+  it('ни одно состояние с таким статусом не зовёт продление', () => {
+    // ⚠️ Правило смотрится с ЭКРАНА, а не только из чистого модуля: страница и
+    // главная рисуют один блок действия, поэтому запрет обязан держаться на всех
+    // состояниях, у которых этот блок вообще виден.
+    const nonRenewable = STATES.filter(
+      ({ subscription }) =>
+        resolveSubscriptionCardActions(subscription).expiredAction &&
+        (subscription.status === 'disabled' || subscription.status === 'pending'),
+    );
+
+    expect(nonRenewable.length).toBeGreaterThan(0);
+
+    for (const { name, subscription } of nonRenewable) {
+      expect(`${name}: ${resolveExpiredRenewOperation(subscription).kind}`).not.toBe(
+        `${name}: renewSubscription`,
+      );
+    }
+  });
+
+  it('не суточная подписка с таким статусом уходит в витрину, и действие у неё одно', () => {
+    const states = STATES.filter(
+      ({ subscription }) =>
+        isExpiredPaid(subscription) &&
+        !subscription.is_daily &&
+        (subscription.status === 'disabled' || subscription.status === 'pending'),
+    );
+
+    expect(states.length).toBeGreaterThan(0);
+
+    for (const { name, subscription } of states) {
+      expect(`${name}: ${resolveExpiredRenewOperation(subscription).kind}`).toBe(
+        `${name}: openPurchase`,
+      );
+      expect(`${name}: ${actionsNow(subscription).join('+')}`).toBe(`${name}: expiredAction`);
+    }
   });
 
   it('в переборе есть состояния с блоком паузы и без него', () => {

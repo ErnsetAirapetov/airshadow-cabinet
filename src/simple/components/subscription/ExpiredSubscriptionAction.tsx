@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useLocation, useNavigate } from 'react-router';
+import { Link, useLocation, useNavigate } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { AxiosError } from 'axios';
 import { subscriptionApi } from '@/api/subscription';
@@ -9,6 +9,7 @@ import { useHapticFeedback } from '@/platform/hooks/useHaptic';
 import { getInsufficientBalanceError } from '@/utils/subscriptionHelpers';
 import type { Subscription } from '@/types';
 import { resolveExpiredCardAction } from '../../pages/dashboardState';
+import { PURCHASE_ROUTE } from './purchaseCta';
 import {
   DEFAULT_RENEW_LABEL_KEY,
   hasBalanceForRenew,
@@ -118,10 +119,14 @@ export function ExpiredSubscriptionAction({
   const operation = resolveExpiredRenewOperation(subscription);
   const hasBalance = hasBalanceForRenew({ subscription, balanceKopeks });
   const action = resolveExpiredCardAction({ hasBalance, renewFailedInsufficientBalance });
-  // ⚠️ Третье состояние кнопки — «баланс ещё не пришёл». Решение выше принято по
-  // нулю, а не по данным, поэтому показывать его результат нельзя: см.
+  // ⚠️ Что рисует кнопка на самом деле. Решение выше принято по нулевому
+  // балансу, пока запрос в полёте, поэтому показывать его результат нельзя, а у
+  // непродлеваемого статуса баланс не спрашивают вовсе: см.
   // `resolveExpiredActionButton`.
-  const button = resolveExpiredActionButton({ action, isBalanceLoading });
+  const button = resolveExpiredActionButton({ operation, action, isBalanceLoading });
+  // Подпись считается ОДИН раз: её правило одно на все ветки кнопки, и вторая
+  // запись разъехалась бы с первой молча.
+  const labelKey = resolveExpiredActionLabelKey(operation, renewLabelKey);
 
   const handleRenew = async () => {
     setIsRenewing(true);
@@ -201,7 +206,22 @@ export function ExpiredSubscriptionAction({
       )}
 
       <div className="flex gap-2.5">
-        {button === 'pending' ? (
+        {button === 'purchase' ? (
+          // ⚠️ Продление этой подписке запретил бэкенд (#67): статус входит в
+          // `NON_RENEWABLE_STATUSES`, и эндпоинт продления отвечает на неё 400.
+          // Поэтому здесь ПЕРЕХОД, а не мутация — витрина для такого статуса
+          // работает, и до #65 страница подписки вела ровно туда. Кнопки
+          // «Пополнить баланс» у этой ветки нет намеренно: продлить с пополненного
+          // счёта всё равно нельзя, это тупик.
+          <Link
+            to={PURCHASE_ROUTE}
+            className={ACTION_BUTTON_CLASS}
+            style={{ background: ACCENT_GRADIENT, boxShadow: ACCENT_SHADOW }}
+          >
+            <SubscriptionIcon className="h-4 w-4" />
+            {t(labelKey)}
+          </Link>
+        ) : button === 'pending' ? (
           // ⚠️ Баланс ещё в полёте. Кнопка та же по форме и месту, но без
           // подписи-обещания и без действия: показать здесь «Пополнить баланс»
           // (решение по нулевому балансу) значило бы подсунуть платящему
@@ -235,9 +255,7 @@ export function ExpiredSubscriptionAction({
             ) : (
               <SubscriptionIcon className="h-4 w-4" />
             )}
-            {isRenewing
-              ? t('common.loading')
-              : t(resolveExpiredActionLabelKey(operation, renewLabelKey))}
+            {isRenewing ? t('common.loading') : t(labelKey)}
           </button>
         ) : (
           // Денег не хватает — той же кнопкой заменяется и продление до попытки

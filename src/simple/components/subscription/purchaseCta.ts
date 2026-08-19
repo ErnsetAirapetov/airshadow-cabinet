@@ -22,7 +22,15 @@ export interface SubscriptionCtaAction {
   hintKey: string;
 }
 
-const PURCHASE_ROUTE = '/subscription/purchase';
+/**
+ * Адрес витрины тарифов.
+ *
+ * ⚠️ Экспортируется с #67: в витрину уходит не только кнопка покупки, но и
+ * общий блок действия истёкшей подписки — у подписки с непродлеваемым статусом
+ * это единственный путь вперёд. Копия литерала в блоке разъехалась бы с этой
+ * молча, а адрес витрины у простого режима один.
+ */
+export const PURCHASE_ROUTE = '/subscription/purchase';
 
 const CHANGE_TARIFF: Omit<SubscriptionCtaAction, 'hintKey'> = {
   kind: 'change',

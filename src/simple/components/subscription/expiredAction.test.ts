@@ -5,9 +5,12 @@ import simpleRu from '../../locales/ru.json';
 import {
   DEFAULT_RENEW_LABEL_KEY,
   MIN_RENEW_BALANCE_KOPEKS,
+  NON_RENEWABLE_STATUSES,
   PAGE_RENEW_LABEL_KEY,
+  PURCHASE_LABEL_KEY,
   RENEW_PERIOD_DAYS,
   hasBalanceForRenew,
+  isNonRenewableStatus,
   isPausedDailySubscription,
   resolveExpiredActionButton,
   resolveExpiredActionLabelKey,
@@ -120,6 +123,31 @@ describe('isPausedDailySubscription: приостановленный суточ
   });
 });
 
+describe('NON_RENEWABLE_STATUSES: чего бэкенд не продлевает вовсе (#67)', () => {
+  it('список ровно тот, что объявлен бэкендом', () => {
+    // ⚠️ Не «disabled и на всякий случай что-то ещё»: это КОПИЯ множества
+    // `_non_renewable` из `renewal.py:130-136`. Разъедется бэкенд — экран
+    // получит 400 обратно, и сверять список придётся снова по тому же файлу,
+    // ссылка на который стоит в докстринге константы.
+    expect([...NON_RENEWABLE_STATUSES]).toEqual(['disabled', 'pending']);
+  });
+
+  it('предикат ловит оба статуса', () => {
+    expect(isNonRenewableStatus(sub({ status: 'disabled' }))).toBe(true);
+    // ⚠️ `pending` — вторая половина отказа. Условие «только про disabled»
+    // краснеет здесь: `pending` сломался бы ровно так же, просто позже.
+    expect(isNonRenewableStatus(sub({ status: 'pending' }))).toBe(true);
+  });
+
+  it('обычные статусы предикат не ловит', () => {
+    // Мутация «считать непродлеваемым всё, кроме active» краснеет здесь:
+    // истёкшая подписка продлевается, это её единственное действие.
+    expect(isNonRenewableStatus(sub({ status: 'expired' }))).toBe(false);
+    expect(isNonRenewableStatus(sub({ status: 'active' }))).toBe(false);
+    expect(isNonRenewableStatus(sub({ status: 'trial' }))).toBe(false);
+  });
+});
+
 describe('resolveExpiredRenewOperation: чем именно продлеваем', () => {
   it('приостановленный суточный тариф — снятие с паузы, а не покупка', () => {
     // `status === 'disabled'` у суточного означает «списания остановлены»;
@@ -156,19 +184,157 @@ describe('resolveExpiredRenewOperation: чем именно продлеваем
     });
   });
 
-  it('приостановка без суточного тарифа продлевается как обычная', () => {
-    // ⚠️ Снятие с паузы — механизм суточного тарифа. Мутация «смотреть только
-    // на статус» красит здесь: обычная подписка ушла бы в `togglePause`.
+  it('обычная подписка со статусом disabled — витрина, а не продление (#67)', () => {
+    // ⚠️ Дефект, с которого заведена #67: бэкенд отвечал на продление
+    // `Cannot renew subscription with status: disabled`, потому что этот статус
+    // объявлен непродлеваемым (`renewal.py:130-136`). Снятие с паузы тут тоже
+    // не годится — `togglePause` это механизм суточного тарифа.
     const disabled = sub({ status: 'disabled' });
 
-    expect(resolveExpiredRenewOperation(disabled)).toEqual({
-      kind: 'renewSubscription',
-      days: RENEW_PERIOD_DAYS,
+    expect(resolveExpiredRenewOperation(disabled)).toEqual({ kind: 'openPurchase' });
+  });
+
+  it('статус pending закрыт тем же правилом', () => {
+    // ⚠️ Второй статус из того же множества бэкенда. Условие, написанное только
+    // под `disabled`, краснеет здесь.
+    expect(resolveExpiredRenewOperation(sub({ status: 'pending' }))).toEqual({
+      kind: 'openPurchase',
     });
+  });
+
+  it('у навигационной операции нет ни дней, ни тарифа', () => {
+    // ⚠️ Витрина — это переход, а не мутация: полей, которыми разметка могла бы
+    // позвать продление или покупку, у этого вида операции не существует.
+    expect(Object.keys(resolveExpiredRenewOperation(sub({ status: 'disabled' })))).toEqual([
+      'kind',
+    ]);
+  });
+
+  it('приостановленный суточный тариф остаётся ВЫШЕ витрины', () => {
+    // ⚠️ Порядок веток. У суточной на паузе статус тоже `disabled`, но для неё
+    // `togglePause` бэкендом разрешён и проверен (#65). Мутация «поставить
+    // ветку витрины первой» краснеет здесь: человек, остановивший списания,
+    // вместо возобновления уезжал бы покупать тариф заново.
+    const paused = sub({ is_daily: true, status: 'disabled', tariff_id: 12 });
+
+    expect(resolveExpiredRenewOperation(paused)).toEqual({ kind: 'resumeDaily' });
   });
 
   it('период продления записан константой', () => {
     expect(RENEW_PERIOD_DAYS).toBe(30);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Перебор состояний: продление НЕ зовётся при непродлеваемом статусе (#67).
+ *
+ * Примеры выше показывают отдельные состояния, а правило должно держаться на
+ * всех сразу: у подписки независимо крутятся суточный тариф, наличие
+ * `tariff_id`, `is_expired` и статус, и именно на их сочетании дефект и жил —
+ * не суточная подписка со статусом `disabled` проваливалась в последнюю ветку.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+const OPERATION_STATES: { name: string; subscription: Subscription }[] = [];
+
+for (const isDaily of [true, false]) {
+  for (const tariffId of [12, undefined]) {
+    for (const status of ['active', 'expired', 'disabled', 'pending', 'trial']) {
+      for (const isExpired of [true, false]) {
+        for (const isDailyPaused of [true, false]) {
+          OPERATION_STATES.push({
+            name: `daily=${isDaily} tariff=${tariffId} status=${status} expired=${isExpired} paused=${isDailyPaused}`,
+            subscription: sub({
+              is_daily: isDaily,
+              tariff_id: tariffId,
+              status,
+              is_expired: isExpired,
+              is_daily_paused: isDailyPaused,
+            }),
+          });
+        }
+      }
+    }
+  }
+}
+
+describe('перебор: непродлеваемый статус не зовёт продление (#67)', () => {
+  it('разбор удался — перебор собран и в нём есть обе стороны правила', () => {
+    // Без этой пары пустой или однобокий перебор давал бы вечно зелёное правило.
+    expect(OPERATION_STATES.length).toBeGreaterThan(50);
+    expect(OPERATION_STATES.some(({ subscription }) => isNonRenewableStatus(subscription))).toBe(
+      true,
+    );
+    expect(OPERATION_STATES.some(({ subscription }) => !isNonRenewableStatus(subscription))).toBe(
+      true,
+    );
+  });
+
+  it('разбор удался — продление в переборе вообще встречается', () => {
+    // Иначе запрет ниже проходил бы потому, что `renewSubscription` не выдаётся
+    // никому и никогда.
+    expect(
+      OPERATION_STATES.some(
+        ({ subscription }) =>
+          resolveExpiredRenewOperation(subscription).kind === 'renewSubscription',
+      ),
+    ).toBe(true);
+  });
+
+  it('НИ ОДНО состояние с непродлеваемым статусом не уходит в renewSubscription', () => {
+    // ⚠️ Сердце задачи. Мутация «убрать ветку витрины» краснеет здесь на всех
+    // состояниях сразу, а не на одном примере: бэкенд отвечает на такое
+    // продление 400 (`renewal.py:130-136`).
+    for (const { name, subscription } of OPERATION_STATES.filter(({ subscription }) =>
+      isNonRenewableStatus(subscription),
+    )) {
+      expect(`${name}: ${resolveExpiredRenewOperation(subscription).kind}`).not.toBe(
+        `${name}: renewSubscription`,
+      );
+    }
+  });
+
+  it('не суточная подписка с таким статусом уходит именно в витрину', () => {
+    const states = OPERATION_STATES.filter(
+      ({ subscription }) => isNonRenewableStatus(subscription) && !subscription.is_daily,
+    );
+
+    expect(states.length).toBeGreaterThan(0);
+
+    for (const { name, subscription } of states) {
+      expect(`${name}: ${resolveExpiredRenewOperation(subscription).kind}`).toBe(
+        `${name}: openPurchase`,
+      );
+    }
+  });
+
+  it('суточная на паузе по-прежнему возобновляется, а не уезжает в витрину', () => {
+    const paused = OPERATION_STATES.filter(({ subscription }) =>
+      isPausedDailySubscription(subscription),
+    );
+
+    expect(paused.length).toBeGreaterThan(0);
+
+    for (const { name, subscription } of paused) {
+      expect(`${name}: ${resolveExpiredRenewOperation(subscription).kind}`).toBe(
+        `${name}: resumeDaily`,
+      );
+    }
+  });
+
+  it('состояния с обычными статусами ветку витрины не получают', () => {
+    // Обратная сторона правила: истёкшая подписка обязана остаться продлеваемой,
+    // иначе задача чинила бы 400 ценой потери единственного рабочего действия.
+    const renewable = OPERATION_STATES.filter(
+      ({ subscription }) => !isNonRenewableStatus(subscription),
+    );
+
+    expect(renewable.length).toBeGreaterThan(0);
+
+    for (const { name, subscription } of renewable) {
+      expect(`${name}: ${resolveExpiredRenewOperation(subscription).kind}`).not.toBe(
+        `${name}: openPurchase`,
+      );
+    }
   });
 });
 
@@ -211,6 +377,26 @@ describe('resolveExpiredActionLabelKey: подпись кнопки продле
     ).toBe(PAGE_RENEW_LABEL_KEY);
   });
 
+  it('переход в витрину подписан «Оформить подписку» (#67)', () => {
+    // ⚠️ Ключ апстримный и ровно тот, что стоял на этой кнопке до #65
+    // (`resolveAllSubscriptionActions`, ветка истёкшей подписки). Своей строки
+    // задача не заводит: формулировка уже согласована владельцем и переведена.
+    expect(PURCHASE_LABEL_KEY).toBe('subscription.getSubscription');
+    expect(resolveExpiredActionLabelKey({ kind: 'openPurchase' })).toBe(PURCHASE_LABEL_KEY);
+  });
+
+  it('подпись витрины подменой ключа не перебивается', () => {
+    // ⚠️ Та же причина, что у «Возобновить»: продлением этот переход не
+    // является. «Продлить подписку» на кнопке, ведущей в витрину, обещало бы
+    // продление, которое бэкенд этой подписке запретил.
+    expect(resolveExpiredActionLabelKey({ kind: 'openPurchase' }, PAGE_RENEW_LABEL_KEY)).toBe(
+      PURCHASE_LABEL_KEY,
+    );
+    expect(resolveExpiredActionLabelKey({ kind: 'openPurchase' }, DEFAULT_RENEW_LABEL_KEY)).toBe(
+      PURCHASE_LABEL_KEY,
+    );
+  });
+
   it('подпись «Возобновить» подменой не перебивается', () => {
     // ⚠️ Мутация «отдавать переданный ключ всегда» краснеет здесь: снятие с
     // паузы — не продление, и «Продлить подписку» на этой кнопке было бы врать
@@ -222,9 +408,24 @@ describe('resolveExpiredActionLabelKey: подпись кнопки продле
 });
 
 describe('resolveExpiredActionButton: что рисует единственная кнопка', () => {
+  /** Обычное продление — операция, при которой баланс и решает. */
+  const RENEW_OPERATION = { kind: 'renewSubscription', days: RENEW_PERIOD_DAYS } as const;
+
   it('баланс загружен — продление или пополнение, как решил resolveExpiredCardAction', () => {
-    expect(resolveExpiredActionButton({ action: 'renew', isBalanceLoading: false })).toBe('renew');
-    expect(resolveExpiredActionButton({ action: 'topUp', isBalanceLoading: false })).toBe('topUp');
+    expect(
+      resolveExpiredActionButton({
+        operation: RENEW_OPERATION,
+        action: 'renew',
+        isBalanceLoading: false,
+      }),
+    ).toBe('renew');
+    expect(
+      resolveExpiredActionButton({
+        operation: RENEW_OPERATION,
+        action: 'topUp',
+        isBalanceLoading: false,
+      }),
+    ).toBe('topUp');
   });
 
   it('баланс ещё в полёте — заглушка, а НЕ пополнение', () => {
@@ -233,8 +434,61 @@ describe('resolveExpiredActionButton: что рисует единственна
     // пополнение — человеку с деньгами, который успевает её нажать. На главной
     // рядом стоит сумма баланса, на странице подписки её нет вовсе. Мутация
     // «выкинуть загрузку из правила» краснеет здесь.
-    expect(resolveExpiredActionButton({ action: 'topUp', isBalanceLoading: true })).toBe('pending');
-    expect(resolveExpiredActionButton({ action: 'renew', isBalanceLoading: true })).toBe('pending');
+    expect(
+      resolveExpiredActionButton({
+        operation: RENEW_OPERATION,
+        action: 'topUp',
+        isBalanceLoading: true,
+      }),
+    ).toBe('pending');
+    expect(
+      resolveExpiredActionButton({
+        operation: RENEW_OPERATION,
+        action: 'renew',
+        isBalanceLoading: true,
+      }),
+    ).toBe('pending');
+  });
+
+  it('витрина не зависит НИ от баланса, ни от его загрузки (#67)', () => {
+    // ⚠️ Второе требование задачи. «Пополнить баланс» у непродлеваемой подписки
+    // — тупик: продлить оттуда всё равно нельзя, деньги просто уедут на счёт.
+    // Заглушка на время запроса баланса здесь тоже не нужна: решение про эту
+    // кнопку баланса не спрашивает вовсе. Мутация «сначала смотреть на баланс»
+    // краснеет здесь трижды.
+    const operation = { kind: 'openPurchase' } as const;
+
+    expect(
+      resolveExpiredActionButton({ operation, action: 'topUp', isBalanceLoading: false }),
+    ).toBe('purchase');
+    expect(resolveExpiredActionButton({ operation, action: 'topUp', isBalanceLoading: true })).toBe(
+      'purchase',
+    );
+    expect(resolveExpiredActionButton({ operation, action: 'renew', isBalanceLoading: true })).toBe(
+      'purchase',
+    );
+  });
+
+  it('витрина остаётся единственной кнопкой такого состояния', () => {
+    // Обратная сторона: перебор состояний с непродлеваемым статусом не даёт ни
+    // одной кнопки, кроме перехода, — ни продления, ни пополнения.
+    const states = OPERATION_STATES.filter(
+      ({ subscription }) => isNonRenewableStatus(subscription) && !subscription.is_daily,
+    );
+
+    expect(states.length).toBeGreaterThan(0);
+
+    for (const { name, subscription } of states) {
+      const operation = resolveExpiredRenewOperation(subscription);
+
+      for (const action of ['renew', 'topUp'] as const) {
+        for (const isBalanceLoading of [true, false]) {
+          expect(
+            `${name}: ${resolveExpiredActionButton({ operation, action, isBalanceLoading })}`,
+          ).toBe(`${name}: purchase`);
+        }
+      }
+    }
   });
 });
 
@@ -296,5 +550,14 @@ describe('обе подписи резолвятся в текст, а не в �
 
   it('подпись «Возобновить» тоже резолвится', () => {
     expect(instance().t(resolveExpiredActionLabelKey({ kind: 'resumeDaily' }))).toBe('Возобновить');
+  });
+
+  it('подпись витрины резолвится в «Оформить подписку»', () => {
+    // ⚠️ Ключ апстримный, без префикса `simple:` — и он обязан находиться. Без
+    // этой проверки опечатка в ключе напечатала бы на кнопке сам ключ, молча и
+    // при зелёной сборке.
+    expect(instance().t(resolveExpiredActionLabelKey({ kind: 'openPurchase' }))).toBe(
+      'Оформить подписку',
+    );
   });
 });
