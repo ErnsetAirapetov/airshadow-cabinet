@@ -3,22 +3,62 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
-import { ticketsApi } from '../api/tickets';
+import { ticketsApi } from '@/api/tickets';
 import { MessageMediaGrid } from '../components/tickets/MessageMediaGrid';
-import { infoApi } from '../api/info';
-import { useAuthStore } from '../store/auth';
-import { logger } from '../utils/logger';
-import { checkRateLimit, getRateLimitResetTime, RATE_LIMIT_KEYS } from '../utils/rateLimit';
-import type { SupportConfig, TicketDetail } from '../types';
-import { Card } from '@/components/data-display/Card';
+import { infoApi } from '@/api/info';
+import { useAuthStore } from '@/store/auth';
+import { logger } from '@/utils/logger';
+import { checkRateLimit, getRateLimitResetTime, RATE_LIMIT_KEYS } from '@/utils/rateLimit';
+import type { SupportConfig, TicketDetail } from '@/types';
+import { Card } from '../components/data-display/Card';
 import { Button } from '@/components/primitives/Button';
-import { staggerContainer, staggerItem } from '@/components/motion/transitions';
-import { ChatIcon, CloseIcon, ImageIcon, PlusIcon, SendIcon } from '@/components/icons';
+import { staggerContainer, staggerItem } from '../components/motion/transitions';
+import {
+  ArrowRightIcon,
+  ChatIcon,
+  CloseIcon,
+  ImageIcon,
+  InfoIcon,
+  PlusIcon,
+  SendIcon,
+} from '@/components/icons';
+import { Link } from 'react-router';
 import { usePlatform } from '@/platform';
-import { linkifyText } from '../utils/linkify';
-import { resolveSupportContact } from '../utils/supportContact';
+import { linkifyText } from '@/utils/linkify';
+import { resolveSupportContact } from '@/utils/supportContact';
+import { SIMPLE_NS } from '../i18n';
 
-const log = logger.createLogger('Support');
+/**
+ * Простая страница поддержки — копия сегодняшней страницы форка (задача #63).
+ *
+ * Раскол, а не упрощение: спека владельца — «переезжает в том виде, какой есть
+ * сейчас». Апстримный `src/pages/Support.tsx` этой же задачей вернулся к
+ * `upstream/main`, и вместе с ним из экспертного режима ушла карточка «Ответы
+ * на частые вопросы» — следствие принято владельцем. Переработка страницы,
+ * если понадобится, будет отдельной задачей со своей спекой; пока любая правка
+ * здесь — это расхождение с тем, что владелец принял на стенде.
+ *
+ * Отличия от апстримного оригинала ровно четыре, и все механические:
+ *
+ *   1. карточка FAQ перед формой обращения — та самая правка форка;
+ *   2. `Card`, `staggerContainer`/`staggerItem` и `MessageMediaGrid` берутся из
+ *      копий в `src/simple/components/**`: гейт границ не пускает простой режим
+ *      в апстримные `data-display`, `motion` и `tickets`, а расширять гейт под
+ *      это канон запрещает;
+ *   3. подписи карточки читаются из нашего неймспейса (`tSimple`), потому что
+ *      апстримные локали всех четырёх языков этой задачей от них очищены;
+ *      остальная страница по-прежнему читает апстримный неймспейс;
+ *   4. имя логгера — `SimpleSupport`, иначе два режима неразличимы в консоли.
+ *
+ * ⚠️ `/support?ticket=<id>` (переход из колокольчика) работает как в апстриме:
+ * параметр никто не читает, тикет выбирается руками. Шов сверяет `pathname`, а
+ * хвост `?…` в него не входит, поэтому записи реестра `/support` достаточно.
+ *
+ * Сторожа страницы и отката — `src/simple/pages/supportPage.test.ts`, сторожа
+ * трёх копий — `src/simple/components/supportCopies.test.ts`.
+ */
+
+const log = logger.createLogger('SimpleSupport');
 
 // Media attachment state
 interface MediaAttachment {
@@ -30,10 +70,13 @@ interface MediaAttachment {
   error?: string;
 }
 
-export default function Support() {
+export function SimpleSupport() {
   log.debug('Component loaded');
 
   const { t } = useTranslation();
+  // Наши две подписи — из неймспейса `simple`; всё остальное на странице
+  // остаётся на апстримном `t`, как и было до раскола.
+  const { t: tSimple } = useTranslation(SIMPLE_NS);
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const queryClient = useQueryClient();
   const { openTelegramLink, openLink } = usePlatform();
@@ -327,6 +370,27 @@ export default function Support() {
           <PlusIcon />
           <span className="ml-2">{t('support.newTicket')}</span>
         </Button>
+      </motion.div>
+
+      {/* Ответы на частые вопросы — перед формой обращения: типовые проблемы
+          решаются без тикета. FAQ живёт на /info, поддержка про него молчала. */}
+      <motion.div variants={staggerItem}>
+        <Link to="/info" className="block">
+          <Card className="flex items-center justify-between transition-colors hover:border-accent-500/40">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-dark-800">
+                <InfoIcon className="h-5 w-5 text-dark-400" />
+              </div>
+              <div>
+                <div className="text-sm font-medium text-dark-100">
+                  {tSimple('support.faqLinkTitle')}
+                </div>
+                <div className="text-xs text-dark-400">{tSimple('support.faqLinkHint')}</div>
+              </div>
+            </div>
+            <ArrowRightIcon className="h-5 w-5 shrink-0 text-dark-400" />
+          </Card>
+        </Link>
       </motion.div>
 
       {/* Contact support card for "both" mode — self-animated: mounts after the

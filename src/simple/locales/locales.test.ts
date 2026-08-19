@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { createInstance } from 'i18next';
 import { describe, expect, it } from 'vitest';
 import en from './en.json';
 import ru from './ru.json';
@@ -83,5 +85,110 @@ describe('синхронность локалей простого режима'
     const empty = [...ruFlat, ...enFlat].filter(([, value]) => value.trim() === '');
 
     expect(empty).toEqual([]);
+  });
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+ * Что видит пользователь с `fa` или `zh` (задача #63).
+ *
+ * Наш неймспейс живёт на двух языках, а переключатель языка в простом режиме
+ * показывает все четыре языка аккаунта — решение владельца от 14.08.2026.
+ * Канон обещает, что персу и китайцу достанется РУССКИЙ по `fallbackLng`, а не
+ * сырой ключ. Обещание держится на одной строке чужого файла (`FALLBACK_LNG` в
+ * `src/i18n.ts`) и на том, что у неймспейса нет своего `fallbackLng`: убери
+ * первое или добавь второе — и на экране появится `support.faqLinkTitle`
+ * вместо текста, молча, при зелёной сборке.
+ *
+ * Поэтому здесь не текстовый сторож, а НАСТОЯЩИЙ i18next: конфиг собирается по
+ * значениям, вычитанным из исходников, и резолв ключей проверяется исполнением.
+ * Alias `@/` тут не нужен — сам `i18next` резолвится как пакет.
+ * ══════════════════════════════════════════════════════════════════════════ */
+
+const APP_I18N = readFileSync('src/i18n.ts', 'utf8');
+const SIMPLE_I18N = readFileSync('src/simple/i18n.ts', 'utf8');
+
+/** Запасной язык приложения — общий для обоих неймспейсов. */
+const fallbackLng = APP_I18N.match(/const FALLBACK_LNG = '([^']+)'/)?.[1] ?? '';
+/** Имя нашего неймспейса. */
+const simpleNs = SIMPLE_I18N.match(/const NS = '([^']+)'/)?.[1] ?? '';
+/** Языки аккаунта — ровно те, что грузит `src/i18n.ts`. */
+const appLanguages = [...APP_I18N.matchAll(/^\s*(\w+): \(\) => import\('\.\/locales\//gm)].map(
+  (found) => found[1],
+);
+
+/** Инстанс i18next с нашим неймспейсом и языком `lng`. */
+function instanceFor(lng: string) {
+  const instance = createInstance();
+  instance.init({
+    lng,
+    fallbackLng,
+    supportedLngs: appLanguages,
+    initImmediate: false,
+    interpolation: { escapeValue: false },
+  });
+  instance.addResourceBundle('ru', simpleNs, ru, true, true);
+  instance.addResourceBundle('en', simpleNs, en, true, true);
+  return instance;
+}
+
+describe('языки без нашей локали не показывают сырых ключей (задача #63)', () => {
+  it('разбор конфигов удался — иначе проверки ниже гоняли бы выдуманный i18next', () => {
+    // Пара «разбор удался»: переименуй апстрим константу или наш неймспейс — и
+    // тест собрал бы инстанс с пустыми значениями, где резолв ничего не значит.
+    expect(fallbackLng).toBe('ru');
+    expect(simpleNs).toBe('simple');
+    expect([...appLanguages].sort()).toEqual(['en', 'fa', 'ru', 'zh']);
+
+    // ⚠️ И то, что константы реально подключены к `init`. Без этой пары тест
+    // читал бы объявление, а приложение жило бы по другому конфигу: замена
+    // `fallbackLng: FALLBACK_LNG` на `fallbackLng: false` вернула бы персу
+    // сырой ключ, а сторож остался бы зелёным.
+    expect(APP_I18N).toContain('fallbackLng: FALLBACK_LNG');
+    expect(APP_I18N).toContain('supportedLngs: SUPPORTED_LANGS');
+    expect(APP_I18N).toContain('const SUPPORTED_LANGS = Object.keys(localeLoaders)');
+  });
+
+  it('своего fallbackLng у неймспейса нет — иначе обещание держится не на том', () => {
+    // ⚠️ Разбор по коду БЕЗ КОММЕНТАРИЕВ: докстринг `src/simple/i18n.ts` сам
+    // объясняет, что своего `fallbackLng` там нет и почему, — на сыром тексте
+    // проверка падала бы по этой прозе, то есть по ложной причине.
+    const code = SIMPLE_I18N.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+
+    // Разбор удался: код неймспейса на месте, а не выгрызен вместе с прозой.
+    expect(code).toContain('addResourceBundle');
+    expect(code).not.toContain('fallbackLng');
+  });
+
+  it('каждый ключ на каждом языке аккаунта резолвится в текст, а не в имя ключа', () => {
+    const raw: string[] = [];
+
+    for (const lng of appLanguages) {
+      const instance = instanceFor(lng);
+      for (const key of ruBases) {
+        const value = instance.t(key, { ns: simpleNs });
+        if (typeof value !== 'string' || value.trim() === '' || value === key) {
+          raw.push(`${lng}: ${key}`);
+        }
+      }
+    }
+
+    // Пусто — значит ни фарси, ни китайский не упираются в сырой ключ.
+    expect(raw).toEqual([]);
+  });
+
+  it('fa и zh получают именно РУССКИЙ текст — цена, признанная каноном', () => {
+    // Не «что-нибудь непустое», а конкретно запасной язык: подмени кто-нибудь
+    // `fallbackLng` на `en`, и проверка выше осталась бы зелёной, а канон —
+    // соврал бы. Ключ карточки FAQ взят как представитель неймспейса.
+    const key = 'support.faqLinkTitle';
+
+    // Разбор удался: ключ в наших локалях действительно есть.
+    expect(ruBases.has(key)).toBe(true);
+
+    for (const lng of ['fa', 'zh']) {
+      expect(instanceFor(lng).t(key, { ns: simpleNs }), lng).toBe(
+        instanceFor('ru').t(key, { ns: simpleNs }),
+      );
+    }
   });
 });
