@@ -6,8 +6,6 @@ import { balanceApi } from '@/api/balance';
 import { giftApi } from '@/api/gift';
 import { referralApi } from '@/api/referral';
 import { subscriptionApi } from '@/api/subscription';
-import { wheelApi } from '@/api/wheel';
-import { ChevronRightIcon } from '@/components/icons';
 import { API } from '@/config/constants';
 import { useAuthStore } from '@/store/auth';
 import { displayName } from '@/utils/displayName';
@@ -98,13 +96,6 @@ export function SimpleDashboard() {
   const { data: referralInfo, isLoading: refLoading } = useQuery({
     queryKey: ['referral-info'],
     queryFn: referralApi.getReferralInfo,
-  });
-
-  const { data: wheelConfig } = useQuery({
-    queryKey: ['wheel-config'],
-    queryFn: wheelApi.getConfig,
-    staleTime: 60000,
-    retry: false,
   });
 
   const { data: pendingGifts } = useQuery({
@@ -315,21 +306,13 @@ export function SimpleDashboard() {
       {/* Промо-предложения */}
       <PromoOffersSection />
 
-      {/* Баннер колеса фортуны */}
-      {wheelConfig?.is_enabled && (
-        <Link to="/wheel" className="bento-card-hover group flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <span className="text-3xl">🎰</span>
-            <div className="min-w-0 flex-1">
-              <h3 className="text-base font-semibold text-dark-100">{t('wheel.banner.title')}</h3>
-              <p className="text-sm text-dark-400">{t('wheel.banner.description')}</p>
-            </div>
-          </div>
-          <div className="flex-shrink-0 text-dark-500 transition-all duration-300 group-hover:translate-x-1 group-hover:text-accent-400">
-            <ChevronRightIcon />
-          </div>
-        </Link>
-      )}
+      {/* Баннера колеса фортуны здесь нет намеренно: решение владельца от
+          19.08.2026 — колесо в простом режиме не используется вовсе (#66).
+          Вместе с баннером ушёл и запрос `wheel-config`, и запись `/wheel` из
+          сквозного списка (`src/simple/passthrough.ts`): вести туда стало нечему,
+          а список существует ровно для адресов наших кнопок. Прямая ссылка
+          работает по-прежнему — апстримная страница в апстримной оболочке.
+          Решение обратимо одной строкой в каждом месте. */}
     </div>
   );
 }
