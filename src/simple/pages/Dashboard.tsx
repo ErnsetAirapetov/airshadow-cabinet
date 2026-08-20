@@ -2,16 +2,18 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
-import { balanceApi } from '@/api/balance';
 import { giftApi } from '@/api/gift';
 import { referralApi } from '@/api/referral';
 import { subscriptionApi } from '@/api/subscription';
+import { ChevronRightIcon, UsersIcon } from '@/components/icons';
 import { API } from '@/config/constants';
+import { useCurrency } from '@/hooks/useCurrency';
 import { useAuthStore } from '@/store/auth';
 import { displayName } from '@/utils/displayName';
+import { BalanceWidget, useBalanceQuery } from '../components/BalanceWidget';
 import PromoOffersSection from '../components/PromoOffersSection';
+import { StatCard } from '../components/StatCard';
 import PendingGiftCard from '../components/dashboard/PendingGiftCard';
-import StatsGrid from '../components/dashboard/StatsGrid';
 import SubscriptionCardActive from '../components/dashboard/SubscriptionCardActive';
 import SubscriptionCardExpired from '../components/dashboard/SubscriptionCardExpired';
 import TrialOfferCard from '../components/dashboard/TrialOfferCard';
@@ -29,9 +31,15 @@ import { resolveDashboardSubscription, resolveSubscriptionPollMs } from './dashb
  * остаются экспертному режиму нетронутыми, а копии мы упрощаем дальше.
  *
  * Уже упрощено относительно апстрима: нет онбординга, нет ленты новостей, нет
- * чипа промо-группы, баланс (в `StatsGrid`) стоит выше подписки, приветствие
- * двумя строками, в карточке подписки нет индикатора зоны расхода, остаток дней
- * кликабелен и ведёт на продление.
+ * чипа промо-группы, баланс стоит выше подписки, приветствие двумя строками, в
+ * карточке подписки нет индикатора зоны расхода, остаток дней кликабелен и ведёт
+ * на продление.
+ *
+ * ⚠️ Акценты расставлены заново в #72: баланс — крупная акцентная карточка (тот
+ * же общий `BalanceWidget`, что на `/balance`, в акцентном тоне), а не мелкая
+ * плитка в сетке 2×1. Человек приходит на главную смотреть деньги и жать
+ * «Подключить устройство»; до #72 самым громким элементом экрана был процент
+ * расхода трафика в шапке карточки тарифа — его там больше нет вовсе.
  *
  * Дальнейшее упрощение владелец диктует по одному блоку за раз.
  */
@@ -40,6 +48,7 @@ export function SimpleDashboard() {
   // Строки простого режима живут в своём неймспейсе; всё, что копии блоков
   // унаследовали от апстрима, продолжает читаться из общего словаря.
   const { t: tSimple } = useTranslation(SIMPLE_NS);
+  const { formatAmount, currencySymbol } = useCurrency();
   const user = useAuthStore((state) => state.user);
   const refreshUser = useAuthStore((state) => state.refreshUser);
   const queryClient = useQueryClient();
@@ -49,12 +58,13 @@ export function SimpleDashboard() {
     refreshUser();
   }, [refreshUser]);
 
-  const { data: balanceData, refetch: refetchBalance } = useQuery({
-    queryKey: ['balance'],
-    queryFn: balanceApi.getBalance,
-    staleTime: API.BALANCE_STALE_TIME_MS,
-    refetchOnMount: 'always',
-  });
+  // ⚠️ Общий запрос виджета, а не свои четыре строки. Параметры `['balance']`
+  // объявлены ОДИН раз — так обещает докстринг `useBalanceQuery`, и до #72
+  // главная это обещание нарушала: она объявляла тот же запрос сама. Пока баланс
+  // рисовала своя плитка, копия была терпимой; теперь на этой же странице живёт
+  // сам виджет, и два объявления одного запроса разъехались бы молча — как
+  // разошлись бы `staleTime` у двух наблюдателей одного ключа.
+  const { data: balanceData, refetch: refetchBalance } = useBalanceQuery();
 
   // ⚠️ Одна подписка — один запрос. Мультитарифных веток здесь нет: дев
   // одно-тарифный, прод уходит с мультитарифа до раскатки нового интерфейса
@@ -200,7 +210,13 @@ export function SimpleDashboard() {
   const userName = displayName(user);
 
   return (
-    <div className="space-y-6">
+    // ⚠️ Ритм на мобилке плотнее, на `sm:` и шире — прежний (#72). Требование
+    // владельца: базовая главная (приветствие, баланс, рефералы, карточка
+    // тарифа) обязана влезать в 390×844 без вертикального скролла, а резерв
+    // высоты берётся ИЗ ОТСТУПОВ, а не из состава — ни один блок ради этого не
+    // выкинут. Второй источник резерва — внутренние поля карточки тарифа, см.
+    // `SubscriptionCardActive`.
+    <div className="space-y-4 sm:space-y-6">
       {/* Приветствие и имя — разными строками. Одной строкой «Добро пожаловать,
           Станислав Манченко» рвётся по ширине экрана в произвольном месте; так
           имя всегда целиком на своей строке и читается как акцент. */}
@@ -222,13 +238,34 @@ export function SimpleDashboard() {
       {/* Ожидающие активации подарки */}
       {pendingGifts && pendingGifts.length > 0 && <PendingGiftCard gifts={pendingGifts} />}
 
-      {/* Баланс и рефералка — выше подписки: деньги проверяют чаще, чем дату. */}
-      <StatsGrid
-        balanceRubles={balanceData?.balance_rubles || 0}
-        referralCount={referralInfo?.total_referrals || 0}
-        earningsRubles={referralInfo?.available_balance_rubles || 0}
-        refLoading={refLoading}
-      />
+      {/* Баланс и рефералка — выше подписки: деньги проверяют чаще, чем дату.
+
+          ⚠️ Раскладка живёт здесь, а не в отдельном `StatsGrid` (#72). Компонент
+          был сеткой из двух ОДНОРОДНЫХ плиток; с переездом баланса на общий
+          `BalanceWidget` однородности не стало, и от `StatsGrid` осталась бы
+          обёртка над единственной плиткой рефералов — имя, которое врёт про
+          сетку, которой компонент больше не владеет. Файл удалён, сетка стоит
+          там же, где остальной вертикальный ритм главной.
+
+          Мобилка — по строке на каждого (баланс главнее рефералов и делить с
+          ними строку не должен), `sm:` и шире — прежние две колонки. `h-full` на
+          ссылках и в акцентном тоне виджета держит карточки одной высоты. */}
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <Link to="/balance" className="block h-full" data-onboarding="balance">
+          <BalanceWidget tone="accent" />
+        </Link>
+        <Link to="/referral" className="block h-full">
+          <StatCard
+            label={t('dashboard.stats.referrals')}
+            value={`${referralInfo?.total_referrals || 0}`}
+            subValue={`+${formatAmount(referralInfo?.available_balance_rubles || 0)} ${currencySymbol}`}
+            icon={<UsersIcon className="h-5 w-5" />}
+            tone="neutral"
+            loading={refLoading}
+            trailing={<ChevronRightIcon className="h-4 w-4 shrink-0 text-dark-500" />}
+          />
+        </Link>
+      </div>
 
       {/* Карточка подписки */}
       {state.kind === 'loading' && (

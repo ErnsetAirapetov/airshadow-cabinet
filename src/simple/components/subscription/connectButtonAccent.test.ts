@@ -1,5 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import {
+  ACCENT_FOREGROUND,
+  ACCENT_FOREGROUND_MUTED,
+  ACCENT_SHADOW,
+  accentFill,
+} from '../accentSurface';
 import { type ConnectButtonAccent, resolveConnectButtonAccent } from './connectButtonAccent';
 
 /**
@@ -21,6 +27,41 @@ import { type ConnectButtonAccent, resolveConnectButtonAccent } from './connectB
 
 /** Исходник охраняемого модуля — сигнатура сверяется текстом, а не через `.length`. */
 const source = readFileSync('src/simple/components/subscription/connectButtonAccent.ts', 'utf8');
+
+/**
+ * Исходник ОБЩЕЙ акцентной поверхности (#72).
+ *
+ * ⚠️ С #72 заливку, тень и цвет «поверх акцента» задаёт не этот модуль, а
+ * `src/simple/components/accentSurface.ts`: ту же поверхность носит карточка
+ * баланса на главной. Причина переезда — ровно та, что записана в докстринге
+ * кнопки: копии расходятся молча, со сборкой зелёной (#59 → #61). Поэтому и
+ * СТОРОЖ переезжает вместе с поверхностью: запреты ниже гоняются не только по
+ * выдаче кнопки, но и по значениям общего модуля — иначе яркость вернулась бы
+ * через поле, которым пользуется только виджет баланса.
+ */
+const surfaceSource = readFileSync('src/simple/components/accentSurface.ts', 'utf8');
+
+/**
+ * Комментарии вырезаны — докстринги обоих модулей сами называют запрещённые
+ * шейды, разбирая, почему их тут не бывает. На сыром тексте структурная проверка
+ * ниже краснела бы по собственной прозе.
+ */
+function stripComments(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+}
+
+/** Код общего модуля без прозы — по нему идут структурные запреты. */
+const surfaceCode = stripComments(surfaceSource);
+
+/** Код акцента кнопки без прозы — по нему проверяется, что шейдов тут не осталось. */
+const buttonCode = stripComments(source);
+
+/** Все шейды палитр, на которые ссылается текст. */
+function paletteShades(text: string, palette = '(?:accent|warning|success|error)'): string[] {
+  return [...text.matchAll(new RegExp(`--color-${palette}-(\\d{2,3})`, 'g'))].map(
+    (found) => found[1],
+  );
+}
 
 /**
  * Список параметров экспортируемой функции — текстом, со скобочным балансом.
@@ -162,6 +203,26 @@ const enabled = resolveConnectButtonAccent(false);
 const atLimit = resolveConnectButtonAccent(true);
 const everyValue: string[] = [...Object.values(enabled), ...Object.values(atLimit)];
 
+/**
+ * Значения общего модуля — включая те, которыми кнопка не пользуется (#72).
+ *
+ * ⚠️ Список собран ВРУЧНУЮ, а не из выдачи кнопки: смысл сторожа как раз в
+ * полях, которых в кнопке нет. `ACCENT_FOREGROUND_MUTED` носит подпись «Текущий
+ * баланс», приглушённая заливка `accentFill(0.55)` — состояние лимита; вернись
+ * светлый шейд в любое из них, выдача кнопки осталась бы прежней и запреты
+ * промолчали бы.
+ */
+const surfaceValues: string[] = [
+  accentFill(),
+  accentFill(0.55),
+  ACCENT_SHADOW,
+  ACCENT_FOREGROUND,
+  ACCENT_FOREGROUND_MUTED,
+];
+
+/** Всё, на что распространяются запреты цвета: выдача кнопки плюс общая поверхность. */
+const everyGuardedValue: string[] = [...everyValue, ...surfaceValues];
+
 describe('разбор удался', () => {
   it('исходник модуля прочитан и сигнатура разобрана', () => {
     // Без пары проверки «в значениях нет литералов» проходили бы на пустоте.
@@ -246,14 +307,14 @@ describe('разбор удался', () => {
 describe('цвет следует акцентной палитре оператора, а не литералу (#61)', () => {
   it('hex-литералов в выдаче нет ни одного', () => {
     // Мутация: вернуть `#3B82F6` в заливку — краснеет здесь.
-    for (const value of everyValue) {
+    for (const value of everyGuardedValue) {
       expect(hexLiterals(value)).toEqual([]);
     }
   });
 
   it('каждый rgb()/rgba() берёт цвет из переменной темы', () => {
     // Мутация: `rgba(59,130,246,0.38)` в свечении — краснеет здесь.
-    for (const value of everyValue) {
+    for (const value of everyGuardedValue) {
       for (const argument of rgbSources(value)) {
         expect(argument.startsWith('var(--color-')).toBe(true);
       }
@@ -263,7 +324,7 @@ describe('цвет следует акцентной палитре операт
   it('посторонних идентификаторов в значениях нет (правило от обратного)', () => {
     // Мутация: `white` вместо `rgb(var(--color-on-accent))` — краснеет здесь,
     // хотя ни hex, ни `rgb(` в такой записи нет вовсе.
-    for (const value of everyValue) {
+    for (const value of everyGuardedValue) {
       expect(foreignTokens(value)).toEqual([]);
     }
   });
@@ -285,7 +346,7 @@ describe('цвет следует акцентной палитре операт
     // «вернуть `--color-accent-500` в свечение» (или в подложку иконки, или в
     // дорожку индикатора) краснеет здесь, хотя пятисотый в светлой теме не
     // ремапится и проверку выше прошёл бы.
-    for (const value of everyValue) {
+    for (const value of everyGuardedValue) {
       for (const name of themeVars(value)) {
         const shade = ACCENT_VAR.exec(name)?.[1];
         if (shade === undefined) continue;
@@ -315,13 +376,15 @@ describe('цвет следует акцентной палитре операт
   });
 
   it('ни один ремапящийся в светлой теме шейд в акценте не используется', () => {
+    // ⚠️ Список включает и общий модуль (#72): подпись «Текущий баланс» лежит на
+    // той же заливке, и ремапнутый шейд гасил бы её ровно так же.
     // ⚠️ Сердце починки. Подпись «лимит устройств достигнут» стояла на
     // `--color-warning-400`; в светлой теме `.light` подменяет его семисотым
     // через `!important`, и тёмно-оранжевая надпись на синей заливке давала
     // контраст 1.37 — состояние «упёрлись в лимит» переставало отличаться от
     // рабочего ровно там, где отличие и нужно. Инлайн-стиль от этого не спасает:
     // перебивается не стиль, а сама переменная.
-    for (const value of everyValue) {
+    for (const value of everyGuardedValue) {
       for (const name of themeVars(value)) {
         const shade = PALETTE_VAR.exec(name)?.[1] ?? '';
         expect(`${name}: ${LIGHT_REMAPPED_SHADES.has(shade)}`).toBe(`${name}: false`);
@@ -378,6 +441,89 @@ describe('неона больше нет: ореол и свечение точ�
 
   it('подложка иконки стала тише прежних 0.18', () => {
     expect(alphaValues(enabled.iconBackground)).toEqual([0.14]);
+  });
+});
+
+describe('акцентная поверхность одна на кнопку и карточку баланса (#72)', () => {
+  it('разбор удался — общий модуль прочитан и не пуст', () => {
+    // Без пары запреты ниже проходили бы на пустоте, а сверка «литерала нет»
+    // стала бы вечно зелёной после переименования модуля.
+    expect(surfaceSource.length).toBeGreaterThan(500);
+    expect(surfaceSource).toContain('export function accentFill(');
+  });
+
+  it('кнопка берёт поверхность из общего модуля, а не объявляет свою', () => {
+    // ⚠️ Сердце #72. Копия поверхности в двух файлах — ровно тот дефект, что уже
+    // случился с самой кнопкой (#59 → #61): значения разъезжаются молча, сборка
+    // зелёная, а на экране два разных синих.
+    expect(source).toContain("from '../accentSurface'");
+    expect(source).toContain('accentFill(');
+    expect(source).toContain('ACCENT_SHADOW');
+  });
+
+  it('шейды заливки объявлены ровно в одном месте', () => {
+    // Мутация «вернуть градиент литералом в connectButtonAccent.ts» краснеет
+    // здесь: имя шейда в этом файле больше не пишется вовсе.
+    expect(buttonCode).not.toContain('--color-accent-600');
+    expect(buttonCode).not.toContain('--color-accent-800');
+    expect(buttonCode).not.toContain('--color-accent-900');
+    // Пара: в общем модуле они, наоборот, обязаны быть — иначе запрет выше
+    // проходил бы на модуле, который заливку потерял.
+    expect(surfaceCode).toContain('--color-accent-600');
+    expect(surfaceCode).toContain('--color-accent-800');
+    expect(surfaceCode).toContain('--color-accent-900');
+  });
+
+  it('в общем модуле нет ремапящихся шейдов — СТРУКТУРНО, а не по списку значений', () => {
+    // ⚠️ Пара к `surfaceValues`: тот список собран РУКАМИ, и новое
+    // экспортируемое поле (скажем, рамка акцентной карточки) выпало бы из-под
+    // запретов молча — ровно тот класс дефекта, против которого стоит весь
+    // остальной сторож. Проверка по тексту модуля от списка не зависит вовсе.
+    const shades = paletteShades(surfaceCode);
+
+    // Разбор удался: шейды в файле вообще есть.
+    expect(shades.length).toBeGreaterThan(0);
+    for (const shade of shades) {
+      expect(`${shade}: ${LIGHT_REMAPPED_SHADES.has(shade)}`).toBe(`${shade}: false`);
+    }
+  });
+
+  it('в общем модуле нет акцентных шейдов светлее шестисотого — тоже структурно', () => {
+    const accentShades = paletteShades(surfaceCode, 'accent').map(Number);
+
+    expect(accentShades.length).toBeGreaterThan(0);
+    for (const shade of accentShades) {
+      expect(`${shade}: ${shade >= MIN_ACCENT_SHADE}`).toBe(`${shade}: true`);
+    }
+  });
+
+  it('разбор шейдов работает на синтетическом тексте', () => {
+    // Самопроверка: промахнись регулярка — и обе проверки выше проходили бы на
+    // пустом списке… если бы не пара «шейды вообще есть». Здесь — что она ловит
+    // именно то, что нужно.
+    expect(
+      paletteShades('rgb(var(--color-accent-500)) rgba(var(--color-warning-300), 0.4)'),
+    ).toEqual(['500', '300']);
+    expect(paletteShades('var(--color-on-accent, 255, 255, 255)')).toEqual([]);
+    expect(paletteShades('--color-accent-600 --color-warning-200', 'accent')).toEqual(['600']);
+  });
+
+  it('приглушение заливки — прозрачностью, а не вторым набором шейдов', () => {
+    // Один аргумент вместо второго градиента: состояние «лимит» не заводит
+    // собственных шейдов, значит и разойтись с рабочим не может.
+    expect(accentFill()).toBe(enabled.background);
+    expect(accentFill(0.55)).toBe(atLimit.background);
+    expect(accentFill(0.55)).toContain('0.55');
+  });
+
+  it('цвет «поверх акцента» и его приглушённая версия идут из общего модуля', () => {
+    expect(ACCENT_FOREGROUND).toBe(enabled.foreground);
+    expect(ACCENT_FOREGROUND_MUTED).toBe(enabled.foregroundMuted);
+    expect(ACCENT_FOREGROUND).toContain('var(--color-on-accent, 255, 255, 255)');
+  });
+
+  it('тень поверхности — та же, что у кнопки', () => {
+    expect(ACCENT_SHADOW).toBe(enabled.boxShadow);
   });
 });
 
