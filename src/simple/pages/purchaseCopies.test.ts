@@ -30,10 +30,6 @@ import { describe, expect, it } from 'vitest';
 
 const COPIES: { copy: string; upstream: string }[] = [
   {
-    copy: 'src/simple/components/subscription/purchase/TariffPurchaseForm.tsx',
-    upstream: 'src/components/subscription/purchase/TariffPurchaseForm.tsx',
-  },
-  {
     copy: 'src/simple/components/subscription/purchase/ClassicPurchaseWizard.tsx',
     upstream: 'src/components/subscription/purchase/ClassicPurchaseWizard.tsx',
   },
@@ -54,8 +50,159 @@ const COPIES: { copy: string; upstream: string }[] = [
 const PICKER_COPY = 'src/simple/components/subscription/purchase/TariffPickerGrid.tsx';
 const PICKER_UPSTREAM = 'src/components/subscription/purchase/TariffPickerGrid.tsx';
 
+const FORM_COPY = 'src/simple/components/subscription/purchase/TariffPurchaseForm.tsx';
+const FORM_UPSTREAM = 'src/components/subscription/purchase/TariffPurchaseForm.tsx';
+
+/**
+ * Правки формы покупки, разрешённые задачей #71 — и никаких других.
+ *
+ * ⚠️ Форма выехала из списка «байт в байт» (`COPIES`) не потому, что сторож
+ * ослаб, а потому что владелец потребовал изменить ровно эту её часть: список
+ * сроков был написан ДВАЖДЫ — здесь и на экране оплаты, — и две реализации
+ * разъехались вплоть до разных подписей («1 месяц» против «30 дней»). Приём тот
+ * же, что уже применён к витрине тарифов ниже: из оригинала вычитается
+ * поимённый список правок, и результат обязан совпасть с копией ПОЛНОСТЬЮ.
+ * Любая другая правка — с нашей стороны или со стороны апстрима — краснеет.
+ *
+ * ⚠️ Фрагменты пишутся исходным текстом и нормализуются тем же `normalize`:
+ * переносы строк и отступы схлопываются, так что сверяется код, а не вёрстка
+ * этого файла.
+ */
+const FORM_EDITS: { name: string; from: string; to: string }[] = [
+  {
+    name: 'импорты: цена за месяц уехала в общий компонент, подпись — в общее правило',
+    from: `
+      import { getMonthlyPriceKopeks } from '@/utils/pricing';
+      import InsufficientBalancePrompt from '../../InsufficientBalancePrompt';
+    `,
+    to: `
+      import InsufficientBalancePrompt from '../../InsufficientBalancePrompt';
+      import { PeriodOptionList } from './PeriodOptionList';
+      import { formatPeriodLabel } from './periodLabel';
+    `,
+  },
+  {
+    name: 'помощник подписи срока рядом с помощником цены',
+    from: `
+      const formatPrice = (kopeks: number) =>
+        kopeks === 0
+          ? t('subscription.free', 'Бесплатно')
+          : \`\${formatAmount(kopeks / 100)} \${currencySymbol}\`;
+
+      const [selectedTariffPeriod, setSelectedTariffPeriod] = useState<TariffPeriod | null>(
+    `,
+    to: `
+      const formatPrice = (kopeks: number) =>
+        kopeks === 0
+          ? t('subscription.free', 'Бесплатно')
+          : \`\${formatAmount(kopeks / 100)} \${currencySymbol}\`;
+
+      const periodLabel = (days: number) => formatPeriodLabel(days, (key, params) => t(key, params));
+
+      const [selectedTariffPeriod, setSelectedTariffPeriod] = useState<TariffPeriod | null>(
+    `,
+  },
+  {
+    name: 'своя сетка сроков заменена общим компонентом',
+    from: `
+      className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {tariff.periods.map((period) => {
+          const promoPeriod = applyPromoDiscount(
+            period.price_kopeks,
+            period.original_price_kopeks,
+          );
+          const displayDiscount = promoPeriod.percent;
+          const displayOriginal = promoPeriod.original;
+          const displayPrice = promoPeriod.price;
+          const displayPerMonth = getMonthlyPriceKopeks(displayPrice, period.days);
+
+          return (
+            <button
+              key={period.days}
+              onClick={() => {
+                setSelectedTariffPeriod(period);
+                setUseCustomDays(false);
+              }}
+              className={\`relative rounded-xl border p-4 text-left transition-all \${
+                selectedTariffPeriod?.days === period.days && !useCustomDays
+                  ? 'border-accent-500 bg-accent-500/10'
+                  : 'border-dark-700/50 bg-dark-800/50 hover:border-dark-600'
+              }\`}
+            >
+              {displayDiscount && displayDiscount > 0 && (
+                <div
+                  className={\`absolute -right-2 -top-2 rounded-full px-2 py-0.5 text-xs font-medium text-white \${
+                    promoPeriod.isPromoGroup ? 'bg-success-500' : 'bg-warning-500'
+                  }\`}
+                >
+                  -{displayDiscount}%
+                </div>
+              )}
+              <div className="text-lg font-semibold text-dark-100">{period.label}</div>
+              <div className="flex items-center gap-2">
+                <span className="font-medium text-accent-400">
+                  {formatPrice(displayPrice)}
+                </span>
+                {displayOriginal && displayOriginal > displayPrice && (
+                  <span className="text-sm text-dark-500 line-through">
+                    {formatPrice(displayOriginal)}
+                  </span>
+                )}
+              </div>
+              {displayPerMonth !== null && (
+                <div className="mt-1 text-xs text-dark-500">
+                  {formatPrice(displayPerMonth)}/{t('subscription.month')}
+                </div>
+              )}
+            </button>
+          );
+        })}
+    `,
+    to: `
+      className="mb-4">
+        <PeriodOptionList
+          options={tariff.periods.map((period) => {
+            const promoPeriod = applyPromoDiscount(
+              period.price_kopeks,
+              period.original_price_kopeks,
+            );
+
+            return {
+              days: period.days,
+              priceKopeks: promoPeriod.price,
+              originalPriceKopeks: promoPeriod.original,
+              discountPercent: promoPeriod.percent ?? 0,
+              missingKopeks: null,
+            };
+          })}
+          selectedDays={useCustomDays ? null : (selectedTariffPeriod?.days ?? null)}
+          onSelect={(days) => {
+            const picked = tariff.periods.find((period) => period.days === days);
+            if (picked) setSelectedTariffPeriod(picked);
+            setUseCustomDays(false);
+          }}
+        />
+    `,
+  },
+  {
+    name: 'подпись базового тарифа в сводке — по общему правилу',
+    from: `{t('subscription.baseTariff')}: {selectedTariffPeriod.label}`,
+    to: `{t('subscription.baseTariff')}:{' '} {periodLabel(selectedTariffPeriod.days)}`,
+  },
+  {
+    name: 'подпись срока в сводке — по общему правилу',
+    from: `selectedTariffPeriod.label,`,
+    to: `periodLabel(selectedTariffPeriod.days),`,
+  },
+];
+
 function read(path: string): string {
   return existsSync(path) ? readFileSync(path, 'utf8') : '';
+}
+
+/** Сколько раз в тексте встречается подстрока. */
+function countOf(source: string, needle: string): number {
+  return source.split(needle).length - 1;
 }
 
 /** Комментарии вырезаны — разбор смотрит только на код. */
@@ -114,6 +261,50 @@ describe('копии блоков покупки совпадают с апст�
       expect(normalize(read(copy))).toBe(normalize(read(upstream)));
     });
   }
+});
+
+describe('форма покупки — апстрим ровно с правками задачи #71', () => {
+  const copy = normalize(read(FORM_COPY));
+  const upstream = normalize(read(FORM_UPSTREAM));
+
+  it('оба файла на месте и опознаны', () => {
+    // Пара «разбор удался»: без неё сверка ниже проходила бы на пустых строках.
+    expect(copy.length).toBeGreaterThan(500);
+    expect(upstream.length).toBeGreaterThan(500);
+    expect(copy).toContain('export function TariffPurchaseForm(');
+    expect(upstream).toContain('export function TariffPurchaseForm(');
+  });
+
+  for (const edit of FORM_EDITS) {
+    it(`правка разобрана: ${edit.name}`, () => {
+      // ⚠️ Каждая правка обязана находиться в оригинале РОВНО ОДИН раз.
+      // Иначе вычитание ниже било бы не туда, а сторож остался бы зелёным —
+      // ровно та молчаливая поломка, от которой этот файл и заведён.
+      expect(normalize(edit.from)).not.toBe('');
+      expect(countOf(upstream, normalize(edit.from))).toBe(1);
+    });
+  }
+
+  it('копия — это апстрим ровно с перечисленными правками и ничем больше', () => {
+    // ⚠️ Сердце сторожа. Полное сравнение, а не выборка строк: «немного
+    // упростить» форму задача не разрешает — там живут оформление по СБП с
+    // привязкой, произвольное число дней и промо-логика, и владелец сказал
+    // прямо «главное чтобы работало». Тронь их — красное здесь.
+    let expected = upstream;
+    for (const edit of FORM_EDITS) {
+      expected = expected.replace(normalize(edit.from), normalize(edit.to));
+    }
+
+    expect(copy).toBe(expected);
+  });
+
+  it('в апстриме своя сетка сроков ОСТАЛАСЬ — экспертный режим не тронут', () => {
+    // Границы задачи: `src/components/**` не правим. Заодно парная проверка к
+    // вычитанию: правки выше сняты с копии, а не с оригинала.
+    expect(upstream).toContain('sm:grid-cols-3');
+    expect(upstream).toContain('{period.label}');
+    expect(upstream).toContain('getMonthlyPriceKopeks(displayPrice, period.days)');
+  });
 });
 
 describe('витрина тарифов — копия минус виджет промо-группы (задача #29)', () => {
