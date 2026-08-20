@@ -107,28 +107,6 @@ export function resolveRenewHref(subscription: Subscription): string {
   return `/subscriptions/${subscription.id}/renew`;
 }
 
-export type ExpiredCardAction = 'renew' | 'topUp';
-
-/**
- * Единственная кнопка карточки истёкшей платной подписки: продление или
- * пополнение баланса — без развилки «две кнопки рядом» (#49).
- *
- * `hasBalance` — грубая проверка «есть хоть немного денег» (порог в
- * `SubscriptionCardExpired`), она не знает цену продления. Поэтому реальный
- * отказ `renewSubscription` по нехватке средств (баланс есть, но меньше
- * цены) обязан перебивать `hasBalance`: иначе кнопка «Продлить» осталась бы
- * висеть после отказа без единого рабочего действия на экране.
- */
-export function resolveExpiredCardAction(params: {
-  hasBalance: boolean;
-  renewFailedInsufficientBalance: boolean;
-}): ExpiredCardAction {
-  if (params.renewFailedInsufficientBalance) {
-    return 'topUp';
-  }
-  return params.hasBalance ? 'renew' : 'topUp';
-}
-
 export type TimeLeftUnit = 'days' | 'hours' | 'minutes';
 
 /**

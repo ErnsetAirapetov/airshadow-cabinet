@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import type { Subscription, SubscriptionStatusResponse } from '@/types';
 import {
   resolveDashboardSubscription,
-  resolveExpiredCardAction,
   resolveRenewHref,
   resolveSubscriptionPollMs,
   resolveTimeLeftDisplay,
@@ -404,29 +403,6 @@ describe('опрос подписки подключён к запросу гл�
 
     expect(interval).toBeGreaterThan(-1);
     expect(nextQuery === -1 || interval < nextQuery).toBe(true);
-  });
-});
-
-describe('resolveExpiredCardAction — одна кнопка вместо развилки (#49)', () => {
-  it('баланса нет — пополнение', () => {
-    expect(
-      resolveExpiredCardAction({ hasBalance: false, renewFailedInsufficientBalance: false }),
-    ).toBe('topUp');
-  });
-
-  it('баланс есть — продление', () => {
-    expect(
-      resolveExpiredCardAction({ hasBalance: true, renewFailedInsufficientBalance: false }),
-    ).toBe('renew');
-  });
-
-  it('продление отказало по нехватке средств — пополнение, даже если hasBalance true', () => {
-    // Грубая проверка `hasBalance` (порог «есть хоть рубль») пропускает случай,
-    // когда денег меньше цены продления. Реальный отказ бэкенда обязан
-    // перебивать её — иначе кнопка «Продлить» осталась бы висеть без действия.
-    expect(
-      resolveExpiredCardAction({ hasBalance: true, renewFailedInsufficientBalance: true }),
-    ).toBe('topUp');
   });
 });
 

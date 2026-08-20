@@ -7,7 +7,7 @@ import { useCurrency } from '@/hooks/useCurrency';
 import { getGlassColors } from '@/utils/glassTheme';
 import { ClockIcon, ExclamationIcon, PlusIcon } from '@/components/icons';
 import { ExpiredSubscriptionAction } from '../subscription/ExpiredSubscriptionAction';
-import { hasBalanceForRenew, isPausedDailySubscription } from '../subscription/expiredAction';
+import { isPausedDailySubscription } from '../subscription/expiredAction';
 
 /**
  * Копия апстримной `src/components/dashboard/SubscriptionCardExpired.tsx`.
@@ -20,23 +20,31 @@ import { hasBalanceForRenew, isPausedDailySubscription } from '../subscription/e
  * без единого действия. Состояние `limited` (исчерпанный трафик) не тронуто —
  * там и раньше была одна кнопка.
  *
- * ⚠️ Блок действия истёкшей платной подписки (кнопка, мутация продления,
- * состояние ошибки, переход на пополнение) отсюда УЕХАЛ в общий компонент
+ * ⚠️ Блок действия истёкшей платной подписки отсюда УЕХАЛ в общий компонент
  * `subscription/ExpiredSubscriptionAction` (#65): владелец потребовал ровно его
  * же на странице подписки, а вторая копия разошлась бы с этой молча, со сборкой
  * зелёной (урок #61). Здесь остался вызов; сторож — `expiredSubscriptionAction.test.ts`.
+ *
+ * ⚠️ Решения по остатку баланса на карточке БОЛЬШЕ НЕТ (#70). Ни кнопка, ни
+ * подпись суммы не отвечают на «хватает ли денег»: цену продления карточка не
+ * знает и знать не может, поэтому кнопка ведёт на экран оплаты, где цена
+ * известна и где человеку называют точную нехватку. Сумма баланса осталась —
+ * как информация, без вердикта.
  */
 
 interface SubscriptionCardExpiredProps {
   subscription: Subscription;
-  balanceKopeks?: number;
+  /**
+   * Сумма баланса для строки «Баланс» — ИНФОРМАЦИЯ, а не решение (#70). Копеек
+   * карточке больше не нужно: порог «денег хватает» ушёл вместе с выбором
+   * действия по остатку.
+   */
   balanceRubles?: number;
   className?: string;
 }
 
 export default function SubscriptionCardExpired({
   subscription,
-  balanceKopeks = 0,
   balanceRubles = 0,
   className,
 }: SubscriptionCardExpiredProps) {
@@ -54,10 +62,6 @@ export default function SubscriptionCardExpired({
   // Условие берётся из общего модуля: то же самое условие выбирает операцию
   // кнопки, и второй его записью заголовок разъехался бы с действием (#65).
   const isDisabledDaily = isPausedDailySubscription(subscription);
-
-  // Порог «денег хватает» — общий с кнопкой блока действия, поэтому подпись
-  // баланса и кнопка не могут разойтись (#65).
-  const hasBalance = hasBalanceForRenew({ subscription, balanceKopeks });
 
   // Color scheme: amber for limited, red for expired/disabled
   const accent = isLimited
@@ -177,9 +181,14 @@ export default function SubscriptionCardExpired({
           <span className="text-[10px] font-medium uppercase tracking-wider text-dark-50/30">
             {t('dashboard.expired.balance')}
           </span>
-          <span
-            className={`text-sm font-semibold ${hasBalance ? 'text-success-400' : 'text-dark-50/30'}`}
-          >
+          {/* ⚠️ Сумма остаётся, ВЕРДИКТ уходит (#70). Раньше она красилась
+              зелёным по порогу «денег хватает» — тому самому грубому порогу, из-за
+              которого кнопка обещала продление, которого не будет: цену продления
+              карточка не знает и знать не может. Зелёные «100 ₽» рядом с такой
+              кнопкой были той же ложью, просто цветом. Само число — информация, и
+              оно остаётся; печатается оно тем же стилем, что и дата слева, то есть
+              как второе значение той же строки, а не как оценка. */}
+          <span className="text-sm font-semibold text-dark-50/50">
             {formatAmount(balanceRubles)} {currencySymbol}
           </span>
         </div>
@@ -221,7 +230,7 @@ export default function SubscriptionCardExpired({
           </Link>
         </div>
       ) : (
-        <ExpiredSubscriptionAction subscription={subscription} balanceKopeks={balanceKopeks} />
+        <ExpiredSubscriptionAction subscription={subscription} />
       )}
     </div>
   );

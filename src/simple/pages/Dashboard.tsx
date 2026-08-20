@@ -271,7 +271,6 @@ export function SimpleDashboard() {
       {(state.kind === 'expired' || state.kind === 'limited') && (
         <SubscriptionCardExpired
           subscription={state.subscription}
-          balanceKopeks={balanceData?.balance_kopeks ?? 0}
           balanceRubles={balanceData?.balance_rubles ?? 0}
         />
       )}

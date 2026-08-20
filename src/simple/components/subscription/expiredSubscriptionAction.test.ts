@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 /**
- * Сторож общего блока действия истёкшей подписки (задача #65).
+ * Сторож общего блока действия истёкшей подписки (задачи #65, #70).
  *
  * ⚠️ Файлы читаются ТЕКСТОМ, а не импортируются: компонентных тестов в проекте
  * не бывает (`environment: 'node'`, alias `@/` в тестах не разрешается,
@@ -17,18 +17,25 @@ import { describe, expect, it } from 'vitest';
  *    это на стенде. Здесь у блока два места вызова — карточка главной и
  *    страница подписки, — поэтому проверяется не «обе копии одинаковые», а
  *    «копия ровно одна».
- * 2. **Механизм целиком внутри блока:** мутация продления, отказ по нехватке
- *    средств, переход на пополнение, порог баланса. Расчёт, вынесенный на экран,
- *    и есть начало второй копии.
- * 3. **Отказ API перебивает грубую проверку баланса.** `hasBalanceForRenew` не
- *    знает цены продления, поэтому без `renewFailedInsufficientBalance` на
- *    экране осталась бы кнопка «Продлить» и ни одного рабочего действия.
- * 4. **Решение «продлить или пополнить» — импортом, а не копией.** Правило
- *    живёт в `pages/dashboardState.ts`; вторая его запись разъехалась бы молча.
+ * 2. **Действие истёкшей подписки — ПЕРЕХОД, а не оплата (#70).** Ни мутации
+ *    продления, ни покупки срока, ни решения по остатку баланса ни в блоке, ни
+ *    на экранах быть не должно: цену продления карточка не знает и знать не
+ *    может, а на экране оплаты она известна и там уже работает механизм «не
+ *    хватает столько-то, пополнить».
+ * 3. **Возобновление суточной подписки НЕ переехало** — это граница #70: там
+ *    `togglePause`, то есть возврат списаний, а не покупка срока.
+ * 4. **Адрес перехода — одна функция маршрута**, литерала в разметке нет.
+ *
+ * ⚠️ Чего здесь БОЛЬШЕ НЕТ и почему. До #70 тут стояли сторожа порога баланса
+ * («порог считает чистый модуль, а не экраны»), флага
+ * `renewFailedInsufficientBalance` и заглушки на время загрузки баланса. Все три
+ * охраняли требования, которые владелец снял, и оставить их зелёными на пустоте
+ * значило бы соврать следующему читателю: он решил бы, что порог всё ещё
+ * где-то живёт. Удалены вместе с кодом.
  */
 
 const ACTION = 'src/simple/components/subscription/ExpiredSubscriptionAction.tsx';
-/** Чистый модуль блока: порог баланса и выбор операции. */
+/** Чистый модуль блока: выбор операции и подписи. */
 const ACTION_STATE = 'src/simple/components/subscription/expiredAction.ts';
 /** Место вызова на главной — там разметка блока и жила. */
 const EXPIRED_CARD = 'src/simple/components/dashboard/SubscriptionCardExpired.tsx';
@@ -38,7 +45,7 @@ const PAGE = 'src/simple/pages/Subscription.tsx';
 const UPSTREAM_CARD = 'src/components/dashboard/SubscriptionCardExpired.tsx';
 /** Общий запрос баланса простого режима — там живёт связка «ключ + queryFn». */
 const BALANCE_WIDGET = 'src/simple/components/BalanceWidget.tsx';
-/** Адрес витрины живёт здесь — блок берёт его оттуда, а не пишет литералом. */
+/** Адрес оплаты живёт здесь — модуль берёт его оттуда, а не пишет литералом. */
 const PURCHASE_CTA = 'src/simple/components/subscription/purchaseCta.ts';
 
 function read(path: string): string {
@@ -64,37 +71,56 @@ function countOf(source: string, needle: string): number {
 }
 
 /**
- * Механизм блока, который апстрим держит в своей карточке целиком. Служит
- * заодно парой «иголки настоящие»: все четыре обязаны найтись в апстримном
- * файле, иначе запреты ниже проходили бы на опечатках.
+ * Оплата с карточки: мутации покупки срока и переход на пополнение.
+ *
+ * ⚠️ До #70 всё это стояло в блоке, и владелец забраковал результат: кнопка
+ * обещала продление, которого не будет, либо требовала пополнения, не называя
+ * суммы. Теперь этого нет ни в блоке, ни на экранах — платят на экране оплаты.
+ *
+ * Апстримная карточка держит тот же механизм целиком, поэтому она же служит
+ * парой «иголки настоящие, а не опечатки».
  */
-const UPSTREAM_MECHANISM_NEEDLES = [
-  'renewSubscription(',
-  'purchaseTariff(',
+const PAYMENT_NEEDLES = [
+  'subscriptionApi.renewSubscription',
+  'subscriptionApi.purchaseTariff',
   '/balance/top-up?',
   "t('dashboard.expired.topUp')",
 ];
 
 /**
- * Наши части механизма — в апстриме их нет вовсе (#49, #65), поэтому парой
- * «иголка настоящая» служит требование «ровно один раз в блоке» ниже.
+ * Решение по остатку баланса. Тоже есть в апстримной карточке (там порог
+ * записан прямо в разметке), то есть иголки живые.
  */
-const OUR_MECHANISM_NEEDLES = ['renewFailedInsufficientBalance', 'resolveExpiredCardAction('];
-
-/** Всё, из чего состоит механизм: на экранах не должно быть ни одной строки. */
-const MECHANISM_NEEDLES = [...UPSTREAM_MECHANISM_NEEDLES, ...OUR_MECHANISM_NEEDLES];
+const BALANCE_DECISION_NEEDLES = ['balanceKopeks', 'hasBalance'];
 
 /**
- * Строки, которых в блоке ровно одна: вторая означала бы вторую копию
- * механизма внутри самого блока. `renewFailedInsufficientBalance` сюда не
- * входит — это имя состояния, оно встречается объявлением, сбросом и чтением.
+ * Снятые вместе с кодом имена простого режима.
+ *
+ * ⚠️ ЧЕСТНО ПРО ПАРУ: живой копии у этих трёх нет нигде — они удалены целиком,
+ * поэтому опечатка в иголке прошла бы незамеченной. Настоящий сторож для них не
+ * текстовый, а типовой: `resolveExpiredCardAction` и `hasBalanceForRenew`
+ * больше не экспортируются, и любое обращение к ним валит `npx tsc --noEmit`
+ * (`editChecks` харнеса) до всякого теста. Проверка ниже — второй рубеж на
+ * случай, если имя воскреснет локальной копией.
  */
-const SINGLE_COPY_NEEDLES = [...UPSTREAM_MECHANISM_NEEDLES, 'resolveExpiredCardAction('];
+const REMOVED_NEEDLES = [
+  'renewFailedInsufficientBalance',
+  'resolveExpiredCardAction',
+  'hasBalanceForRenew',
+  'resolveExpiredActionButton',
+  'isBalanceLoading',
+];
+
+/** Наши файлы, в которых оплаты и порога быть не должно вовсе. */
+const OUR_SOURCES: { name: string; code: string }[] = [
+  { name: 'блок', code: action },
+  { name: 'чистый модуль', code: actionState },
+  { name: 'карточка главной', code: card },
+  { name: 'страница подписки', code: page },
+];
 
 describe('разбор удался', () => {
   it('общий запрос баланса прочитан — иначе связка сторожила бы пустоту', () => {
-    // Без этой пары регэксп «ключ + queryFn рядом» проходил бы на пустой строке
-    // после переименования файла виджета.
     expect(balanceWidget.length).toBeGreaterThan(500);
     expect(balanceWidget).toContain('export function useBalanceQuery()');
   });
@@ -114,40 +140,123 @@ describe('разбор удался', () => {
   });
 
   it('комментарии вырезаны, а код — нет', () => {
-    expect(read(ACTION)).toContain('задача #65');
-    expect(action).not.toContain('задача #65');
+    expect(read(ACTION)).toContain('задача');
+    expect(action).not.toContain('задача');
   });
 
   it('искомые сочетания в коде вообще встречаются — иначе запреты пустые', () => {
-    // Пара для правил «на экранах механизма нет». Апстримная карточка держит
-    // тот же механизм целиком — значит иголки настоящие, а не опечатки.
-    for (const needle of UPSTREAM_MECHANISM_NEEDLES) {
+    // Пара для правил «оплаты и порога у нас нет». Апстримная карточка держит
+    // ровно тот механизм, который простой режим унёс на экран оплаты, — значит
+    // иголки настоящие.
+    for (const needle of [...PAYMENT_NEEDLES, ...BALANCE_DECISION_NEEDLES]) {
       expect(`${needle}: ${upstream.includes(needle)}`).toBe(`${needle}: true`);
     }
   });
 });
 
+describe('действие истёкшей подписки — переход, а не оплата (#70)', () => {
+  it('НИ ОДИН наш файл не платит с карточки', () => {
+    // ⚠️ Сердце #70. Мутация «вернуть блоку продление» краснеет здесь, причём
+    // сразу на всех четырёх файлах: расчёт, унесённый на экран, и есть начало
+    // второй копии.
+    for (const { name, code } of OUR_SOURCES) {
+      for (const needle of PAYMENT_NEEDLES) {
+        expect(`${needle} в «${name}»: ${code.includes(needle)}`).toBe(
+          `${needle} в «${name}»: false`,
+        );
+      }
+    }
+  });
+
+  it('решения по остатку баланса нет ни в блоке, ни на экранах', () => {
+    // ⚠️ Мутация «вернуть проверку остатка» краснеет здесь. Порог отвечал лишь
+    // на «есть ли хоть рубль», цену продления он не знал — из-за этого при
+    // 100 ₽ кнопка обещала продление, которого не будет.
+    for (const { name, code } of OUR_SOURCES) {
+      for (const needle of BALANCE_DECISION_NEEDLES) {
+        expect(`${needle} в «${name}»: ${code.includes(needle)}`).toBe(
+          `${needle} в «${name}»: false`,
+        );
+      }
+    }
+  });
+
+  it('имена снятых требований не воскресли', () => {
+    for (const { name, code } of OUR_SOURCES) {
+      for (const needle of REMOVED_NEEDLES) {
+        expect(`${needle} в «${name}»: ${code.includes(needle)}`).toBe(
+          `${needle} в «${name}»: false`,
+        );
+      }
+    }
+  });
+
+  it('страница подписки больше не запрашивает баланс ради этой кнопки', () => {
+    // ⚠️ Запрос жил там только ради порога и заглушки «баланс ещё грузится».
+    // Порога нет — не нужен и запрос. Пара: сам запрос никуда не делся и
+    // по-прежнему объявлен один раз рядом с виджетом баланса.
+    expect(page).not.toContain('useBalanceQuery');
+    expect(balanceWidget).toContain('export function useBalanceQuery()');
+    expect(balanceWidget).toMatch(
+      /queryKey: \['balance'\],\s*\n\s*queryFn: balanceApi\.getBalance/,
+    );
+  });
+
+  it('кнопка блока — ссылка, и адрес ей приносит операция', () => {
+    // Перенос строки внутри тега ставит prettier — сторож смотрит на связку
+    // «ссылка + адрес», а не на раскладку.
+    expect(action).toMatch(/<Link\s+to=\{operation\.to\}/);
+    expect(countOf(action, 'operation.to')).toBe(1);
+  });
+
+  it('литерала адреса в блоке нет — переход строит единственная функция', () => {
+    // ⚠️ Копия литерала разъехалась бы с правилом молча. Мутация «вписать адрес
+    // в разметку» краснеет здесь, а не на стенде, где эти состояния
+    // воспроизвести нечем.
+    expect(action).not.toContain("'/subscription/purchase'");
+    expect(action).not.toContain('PURCHASE_ROUTE');
+    expect(action).not.toContain('/renew');
+
+    // Пары «разбор удался»: оба адреса объявлены в общем модуле, и оба
+    // достаются операции, а не разметке.
+    expect(purchaseCta).toContain("export const PURCHASE_ROUTE = '/subscription/purchase'");
+    expect(purchaseCta).toContain('export function paymentRoute(');
+    expect(actionState).toContain("import { PURCHASE_ROUTE, paymentRoute } from './purchaseCta'");
+    expect(countOf(actionState, 'paymentRoute(subscription.id)')).toBe(1);
+  });
+
+  it('выбор операции берётся из чистого модуля, а не пишется разметкой', () => {
+    expect(action).toContain('resolveExpiredRenewOperation(');
+    expect(action).toContain('resolveExpiredActionLabelKey(operation, renewLabelKey)');
+  });
+});
+
+describe('возобновление суточной подписки не переехало — граница #70', () => {
+  it('ветка паузы по-прежнему зовёт togglePause, и ровно один раз', () => {
+    // ⚠️ Граница задачи: там ВОЗОБНОВЛЕНИЕ списаний, а не покупка срока.
+    // Мутация «отправить и паузу на экран оплаты» краснеет здесь.
+    expect(countOf(action, 'subscriptionApi.togglePause(subscription.id)')).toBe(1);
+    expect(action).toContain("operation.kind === 'resumeDaily'");
+    // Пара: этот же вызов есть и в апстримной карточке — иголка живая.
+    expect(upstream).toContain('subscriptionApi.togglePause(');
+  });
+
+  it('отказ возобновления виден человеку, а не тонет молча', () => {
+    // Единственная оставшаяся мутация может отказать (у суточной цены свой
+    // отказ по нехватке средств), и её ошибку блок обязан показать.
+    expect(action).toContain('getInsufficientBalanceError(');
+    expect(action).toContain('role="alert"');
+  });
+
+  it('после успеха обновляются и подписка, и баланс', () => {
+    // Возобновление списывает суточную цену — баланс на экране обязан
+    // обновиться, иначе виджет покажет старую сумму.
+    expect(action).toContain("queryKey: ['balance']");
+    expect(action).toContain("queryKey: ['subscriptions-list']");
+  });
+});
+
 describe('блок действия — один на два экрана (#65, урок #61)', () => {
-  it('механизм записан ровно в одном файле', () => {
-    // ⚠️ Сердце сторожа. Мутация «второй экран рисует свой блок» краснеет
-    // здесь: любая копия принесёт с собой мутацию продления и переход на
-    // пополнение.
-    for (const needle of MECHANISM_NEEDLES) {
-      expect(`${needle} в блоке: ${action.includes(needle)}`).toBe(`${needle} в блоке: true`);
-      expect(`${needle} на главной: ${card.includes(needle)}`).toBe(`${needle} на главной: false`);
-      expect(`${needle} на странице: ${page.includes(needle)}`).toBe(
-        `${needle} на странице: false`,
-      );
-    }
-  });
-
-  it('внутри блока механизм тоже не задваивается', () => {
-    // Копия могла бы завестись и здесь — двумя кнопками в одной разметке.
-    for (const needle of SINGLE_COPY_NEEDLES) {
-      expect(`${needle}: ${countOf(action, needle)}`).toBe(`${needle}: 1`);
-    }
-  });
-
   it('оба экрана зовут общий блок ровно по разу', () => {
     expect(countOf(card, '<ExpiredSubscriptionAction')).toBe(1);
     expect(countOf(page, '<ExpiredSubscriptionAction')).toBe(1);
@@ -158,114 +267,10 @@ describe('блок действия — один на два экрана (#65, 
     expect(page).toContain("from '../components/subscription/ExpiredSubscriptionAction'");
   });
 
-  it('порог баланса считает чистый модуль, а не экраны', () => {
-    // Два расчёта разъехались бы молча: подпись баланса зелёная, а кнопка ведёт
-    // на пополнение (или наоборот).
-    expect(actionState).toContain('MIN_RENEW_BALANCE_KOPEKS');
-    expect(action).toContain('hasBalanceForRenew(');
-    expect(card).toContain('hasBalanceForRenew(');
-    for (const source of [action, card, page]) {
-      expect(source).not.toContain('balanceKopeks >=');
-    }
-  });
-
-  it('в апстримной карточке порог записан прямо в разметке — было именно так', () => {
-    expect(upstream).toContain('balanceKopeks >=');
-  });
-
-  it('выбор операции продления берётся из чистого модуля', () => {
-    // Три ветки (снять с паузы / купить день / продлить период) лечат разные
-    // отказы бэкенда, и проверить их можно только вызовом функции.
-    expect(action).toContain('resolveExpiredRenewOperation(');
-    expect(action).toContain("case 'resumeDaily'");
-    expect(action).toContain("case 'purchaseDailyTariff'");
-  });
-});
-
-describe('отказ по нехватке средств перебивает грубую проверку баланса (#65)', () => {
-  it('решение «продлить или пополнить» приходит из dashboardState, а не пишется заново', () => {
-    expect(action).toContain('resolveExpiredCardAction({');
-    expect(action).toContain('renewFailedInsufficientBalance');
-    expect(action).toContain('hasBalance');
-  });
-
-  it('флаг отказа поднимается там, где распознан отказ по средствам', () => {
-    // ⚠️ Без этого после отказа на экране остаётся кнопка «Продлить» и ни
-    // одного рабочего действия: `hasBalanceForRenew` цены продления не знает.
-    expect(action).toContain('getInsufficientBalanceError(');
-    expect(action).toContain('setRenewFailedInsufficientBalance(true)');
-  });
-
-  it('флаг сбрасывается перед новой попыткой', () => {
-    // Иначе кнопка «Пополнить баланс» залипала бы после пополнения.
-    expect(action).toContain('setRenewFailedInsufficientBalance(false)');
-  });
-
-  it('после успеха обновляются и баланс, и опции покупки', () => {
-    expect(action).toContain("queryKey: ['balance']");
-    expect(action).toContain("queryKey: ['purchase-options']");
-  });
-});
-
-describe('непродлеваемый статус: переход в витрину, а не мутация (#67)', () => {
-  it('разбор удался — источник запрета назван в чистом модуле, с файлом и строками', () => {
-    // ⚠️ Список статусов сверяется с реальностью НЕ НА ВЕРУ: в докстринге
-    // константы стоит ссылка на код бэкенда, по которому её можно перепроверить
-    // через полгода. Читается СЫРОЙ текст — в `actionState` комментарии вырезаны.
-    const raw = read(ACTION_STATE);
-
-    expect(raw.length).toBeGreaterThan(500);
-    expect(raw).toContain('renewal.py:130-136');
-    expect(raw).toContain('helpers.py:205');
-    // Пара: сама константа — код, а не проза докстринга.
-    expect(actionState).toContain('export const NON_RENEWABLE_STATUSES');
-  });
-
-  it('у кнопки витрины есть своя ветка, и она не зовёт мутацию', () => {
-    // ⚠️ Мутация «отдать этому состоянию обычную кнопку продления» краснеет
-    // здесь: бэкенд отвечает на такое продление 400 (задача #67).
-    expect(action).toContain("button === 'purchase'");
-    // Перенос строки внутри тега ставит prettier — сторож смотрит на связку
-    // «ссылка + адрес», а не на раскладку.
-    expect(action).toMatch(/<Link\s+to=\{operation\.to\}/);
-  });
-
-  it('ветка витрины стоит ПЕРВОЙ — раньше заглушки, продления и пополнения', () => {
-    // ⚠️ Порядок веток разметки повторяет порядок правила: решение про витрину
-    // баланса не спрашивает вовсе. Перестановка ниже заглушки вернула бы
-    // человеку с непродлеваемой подпиской спиннер вместо действия.
-    const purchase = action.indexOf("button === 'purchase'");
-    const pending = action.indexOf("button === 'pending'");
-
-    expect(purchase).toBeGreaterThan(-1);
-    expect(pending).toBeGreaterThan(-1);
-    expect(purchase).toBeLessThan(pending);
-    expect(purchase).toBeLessThan(action.indexOf('onClick={handleRenew}'));
-    expect(purchase).toBeLessThan(action.indexOf('onClick={handleTopUp}'));
-  });
-
-  it('адрес перехода приходит ОПЕРАЦИЕЙ, а не литералом в блоке (#69)', () => {
-    // ⚠️ Копия литерала разъехалась бы с правилом молча. С #69 адрес считает
-    // `resolveExpiredRenewOperation` — тот же единый экран оплаты, что у кнопки
-    // продления активной подписки. Мутация «вернуть в разметку витрину»
-    // краснеет здесь: на стенде это состояние воспроизвести нечем.
-    expect(action).not.toContain("'/subscription/purchase'");
-    expect(action).not.toContain('PURCHASE_ROUTE');
-    expect(action).not.toContain('/renew');
-
-    // Пары «разбор удался»: оба адреса объявлены в общем модуле, и оба
-    // достаются операции, а не разметке.
-    expect(purchaseCta).toContain("export const PURCHASE_ROUTE = '/subscription/purchase'");
-    expect(purchaseCta).toContain('export function paymentRoute(');
-    expect(actionState).toContain("import { PURCHASE_ROUTE, paymentRoute } from './purchaseCta'");
-    expect(actionState).toContain('paymentRoute(subscription.id)');
-  });
-
-  it('подпись кнопки витрины берётся правилом, а не пишется в разметке', () => {
-    // Ключ один на два экрана и подменой места вызова не перебивается —
-    // проверено вызовом функции в `expiredAction.test.ts`.
-    expect(actionState).toContain('PURCHASE_LABEL_KEY');
-    expect(action).not.toContain('subscription.getSubscription');
+  it('внутри блока кнопка не задваивается', () => {
+    // Копия могла бы завестись и здесь — двумя кнопками в одной разметке.
+    expect(countOf(action, '<Link')).toBe(1);
+    expect(countOf(action, 'onClick={handleResume}')).toBe(1);
   });
 });
 
@@ -286,17 +291,20 @@ describe('различия мест вызова — пропами, а не в�
     }
   });
 
-  it('возврат с пополнения берётся из маршрута, а не пишется литералом', () => {
-    // ⚠️ Третье различие мест вызова, и единственное, которое блок обязан
-    // вычислить сам: `returnTo` у него один на два экрана. Литерал здесь —
-    // молчаливый дефект ровно одного из них: с главной человек возвращался бы
-    // на страницу подписки либо наоборот, сборке и типам всё равно.
-    // Мутация `params.set('returnTo', '/subscriptions')` красит эту проверку.
-    expect(action).toContain("params.set('returnTo', location.pathname)");
-    // И адрес не подменён рядом: пути простого режима в блоке не записаны
-    // литералом вовсе, кроме самого адреса пополнения.
-    expect(action).not.toContain("'/subscriptions'");
-    expect(action).not.toContain("'/subscription'");
+  it('подпись продления приходит пропом, а страница просит длинную', () => {
+    // Решение владельца от 19.08.2026: «Продлить подписку» — только на странице
+    // подписки, на главной остаётся короткое «Продлить».
+    expect(action).toContain('renewLabelKey = DEFAULT_RENEW_LABEL_KEY');
+    expect(page).toContain('renewLabelKey={PAGE_RENEW_LABEL_KEY}');
+    // Карточка главной подписи не передаёт — короткая приходит дефолтом.
+    expect(card).not.toContain('renewLabelKey');
+  });
+
+  it('подпись перехода берётся правилом, а не пишется в разметке', () => {
+    // Ключ один на два экрана и подменой места вызова не перебивается —
+    // проверено вызовом функции в `expiredAction.test.ts`.
+    expect(actionState).toContain('PURCHASE_LABEL_KEY');
+    expect(action).not.toContain('subscription.getSubscription');
   });
 });
 
@@ -314,78 +322,5 @@ describe('страница подписки: одно действие у ист
     // одной.
     expect(page).not.toContain('!subscription.is_active &&');
     expect(page).not.toContain('isExpiredPaidSubscription(');
-  });
-
-  it('баланс приходит общим запросом простого режима, а не копией на странице', () => {
-    // ⚠️ Прежняя проверка искала здесь подстроку `queryKey: ['balance']` — и
-    // была ложно-зелёной: та же строка стоит в `pauseMutation.onSuccess`
-    // страницы с прошлых задач, поэтому неправильный ключ нового запроса
-    // проверку проходил (ревью доказало подменой на `['page-balance']`).
-    //
-    // Правильный ответ оказался проще сторожа: запрос с этим ключом уже
-    // объявлен один раз рядом с виджетом баланса, и страница зовёт его.
-    expect(page).toContain('useBalanceQuery()');
-    expect(page).not.toContain('balanceApi.getBalance');
-
-    // Связка «ключ + queryFn рядом» — в общем запросе. Разъедься ключ, и блок не
-    // заметил бы пополнения: его мутация инвалидирует именно `['balance']`.
-    expect(balanceWidget).toMatch(
-      /queryKey: \['balance'\],\s*\n\s*queryFn: balanceApi\.getBalance/,
-    );
-  });
-
-  it('связка проверяется именно связкой — одна строка инвалидации её не подделывает', () => {
-    // Пара «разбор удался» к регэкспу выше: та самая строка, из-за которой
-    // прежняя проверка ничего не значила.
-    const invalidation = "queryClient.invalidateQueries({ queryKey: ['balance'] });";
-
-    expect(page).toContain(invalidation);
-    expect(action).toContain("queryKey: ['balance']");
-    expect(invalidation).not.toMatch(
-      /queryKey: \['balance'\],\s*\n\s*queryFn: balanceApi\.getBalance/,
-    );
-  });
-
-  it('пока баланс грузится, кнопка не предлагает пополнение', () => {
-    // ⚠️ Решение по нулевому балансу показывать нельзя: 200–400 мс единственной
-    // кнопкой экрана было бы «Пополнить баланс», и человек с деньгами успевает
-    // её нажать. Правило — в чистом модуле, разметка читает его результат.
-    expect(action).toContain('resolveExpiredActionButton({ operation, action, isBalanceLoading })');
-    expect(action).toContain("button === 'pending'");
-    expect(page).toContain('isBalanceLoading={isBalancePending}');
-    // На главной сумма баланса стоит рядом с кнопкой, флаг там не нужен, и
-    // `Dashboard.tsx` эта задача не трогает (границы #65).
-    expect(card).not.toContain('isBalanceLoading');
-  });
-
-  it('подпись продления приходит пропом, а страница просит длинную', () => {
-    // Решение владельца от 19.08.2026: «Продлить подписку» — только на странице
-    // подписки, на главной остаётся короткое «Продлить».
-    expect(action).toContain('resolveExpiredActionLabelKey(operation, renewLabelKey)');
-    expect(action).toContain('renewLabelKey = DEFAULT_RENEW_LABEL_KEY');
-    expect(page).toContain('renewLabelKey={PAGE_RENEW_LABEL_KEY}');
-    // Карточка главной подписи не передаёт — короткая приходит дефолтом.
-    expect(card).not.toContain('renewLabelKey');
-  });
-
-  it('`subscription.id` уходит в покупку суточного тарифа четвёртым аргументом', () => {
-    // ⚠️ Без него бэкенд ищет строку по `(user_id, tariff_id)` и проигрывает
-    // гонку с вебхуками панели — это всплывало как «Тариф уже активен» плюс
-    // возврат средств. Мутация «убрать id из вызова» краснеет здесь.
-    expect(action).toMatch(
-      /purchaseTariff\(\s*operation\.tariffId,\s*operation\.days,\s*undefined,\s*subscription\.id,\s*\)/,
-    );
-    expect(action).toMatch(/renewSubscription\(operation\.days, subscription\.id\)/);
-  });
-
-  it('ветка продления ведёт на продление, а не на пополнение', () => {
-    // ⚠️ Переворот ветки выдал бы «Пополнить баланс» тем, у кого деньги есть, —
-    // и наоборот. Ни сборка, ни типы этого не видят.
-    expect(action).toMatch(/button === 'renew' \?[\s\S]{0,200}?onClick=\{handleRenew\}/);
-    expect(action).toMatch(/button === 'pending' \?[\s\S]{0,300}?disabled\s*\n/);
-    // Пополнение — в последней ветке, после продления.
-    expect(action.indexOf('onClick={handleRenew}')).toBeLessThan(
-      action.indexOf('onClick={handleTopUp}'),
-    );
   });
 });
