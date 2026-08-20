@@ -8,8 +8,9 @@ import { useCurrency } from '@/hooks/useCurrency';
 import { usePromoDiscount } from '@/hooks/usePromoDiscount';
 import { usePlatform } from '@/platform';
 import { openPaymentUrl } from '@/utils/openPaymentUrl';
-import { getMonthlyPriceKopeks } from '@/utils/pricing';
 import InsufficientBalancePrompt from '../../InsufficientBalancePrompt';
+import { PeriodOptionList } from './PeriodOptionList';
+import { formatPeriodLabel } from './periodLabel';
 import type { Tariff, TariffPeriod } from '@/types';
 
 // ──────────────────────────────────────────────────────────────────
@@ -68,6 +69,12 @@ export function TariffPurchaseForm({
     kopeks === 0
       ? t('subscription.free', 'Бесплатно')
       : `${formatAmount(kopeks / 100)} ${currencySymbol}`;
+
+  // ⚠️ Подпись срока — ОДНО правило на весь простой режим (#71). Прежде здесь
+  // показывался `period.label` от бэкенда («1 месяц»), а экран оплаты писал
+  // «30 дней»: две конвенции на одном платёжном пути. Почему выбраны дни —
+  // в докстринге `periodLabel.ts`.
+  const periodLabel = (days: number) => formatPeriodLabel(days, (key, params) => t(key, params));
 
   // Form-internal state — seeded from the tariff prop. Resets via
   // `key={tariff.id}` on the parent's render.
@@ -322,59 +329,43 @@ export function TariffPurchaseForm({
           <div>
             <div className="mb-3 text-sm text-dark-400">{t('subscription.selectPeriod')}</div>
 
+            {/* ⚠️ Список сроков — ОБЩИЙ компонент простого режима (#71). Своей
+                сетки у формы больше нет: ровно она и была тем «другим по виду
+                экраном», на который человек попадал после выбора тарифа —
+                другая раскладка и другая подпись («1 месяц» вместо «30 дней»)
+                при тех же самых данных. Промо-скидку по-прежнему считает
+                форма, компонент только рисует посчитанное. */}
             {tariff.periods.length > 0 && !useCustomDays && (
-              <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-                {tariff.periods.map((period) => {
-                  const promoPeriod = applyPromoDiscount(
-                    period.price_kopeks,
-                    period.original_price_kopeks,
-                  );
-                  const displayDiscount = promoPeriod.percent;
-                  const displayOriginal = promoPeriod.original;
-                  const displayPrice = promoPeriod.price;
-                  const displayPerMonth = getMonthlyPriceKopeks(displayPrice, period.days);
+              <div className="mb-4">
+                <PeriodOptionList
+                  options={tariff.periods.map((period) => {
+                    const promoPeriod = applyPromoDiscount(
+                      period.price_kopeks,
+                      period.original_price_kopeks,
+                    );
 
-                  return (
-                    <button
-                      key={period.days}
-                      onClick={() => {
-                        setSelectedTariffPeriod(period);
-                        setUseCustomDays(false);
-                      }}
-                      className={`relative rounded-xl border p-4 text-left transition-all ${
-                        selectedTariffPeriod?.days === period.days && !useCustomDays
-                          ? 'border-accent-500 bg-accent-500/10'
-                          : 'border-dark-700/50 bg-dark-800/50 hover:border-dark-600'
-                      }`}
-                    >
-                      {displayDiscount && displayDiscount > 0 && (
-                        <div
-                          className={`absolute -right-2 -top-2 rounded-full px-2 py-0.5 text-xs font-medium text-white ${
-                            promoPeriod.isPromoGroup ? 'bg-success-500' : 'bg-warning-500'
-                          }`}
-                        >
-                          -{displayDiscount}%
-                        </div>
-                      )}
-                      <div className="text-lg font-semibold text-dark-100">{period.label}</div>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-accent-400">
-                          {formatPrice(displayPrice)}
-                        </span>
-                        {displayOriginal && displayOriginal > displayPrice && (
-                          <span className="text-sm text-dark-500 line-through">
-                            {formatPrice(displayOriginal)}
-                          </span>
-                        )}
-                      </div>
-                      {displayPerMonth !== null && (
-                        <div className="mt-1 text-xs text-dark-500">
-                          {formatPrice(displayPerMonth)}/{t('subscription.month')}
-                        </div>
-                      )}
-                    </button>
-                  );
-                })}
+                    return {
+                      days: period.days,
+                      priceKopeks: promoPeriod.price,
+                      originalPriceKopeks: promoPeriod.original,
+                      discountPercent: promoPeriod.percent ?? 0,
+                      /* Нехватку денег форма не считает: её называет уже
+                         ответ бэкенда через InsufficientBalancePrompt ниже. */
+                      missingKopeks: null,
+                    };
+                  })}
+                  selectedDays={useCustomDays ? null : (selectedTariffPeriod?.days ?? null)}
+                  onSelect={(days) => {
+                    /* ⚠️ Компонент отдаёт дни, а сводка «К оплате» читает у
+                       периода цену и доп. устройства — поэтому форма поднимает
+                       по дням свой TariffPeriod. Сброс произвольных дней здесь
+                       обязателен: без него человек тыкает срок, а платит за
+                       число из ползунка. */
+                    const picked = tariff.periods.find((period) => period.days === days);
+                    if (picked) setSelectedTariffPeriod(picked);
+                    setUseCustomDays(false);
+                  }}
+                />
               </div>
             )}
 
@@ -632,7 +623,8 @@ export function TariffPurchaseForm({
                               <>
                                 <div className="flex justify-between text-sm text-dark-300">
                                   <span>
-                                    {t('subscription.baseTariff')}: {selectedTariffPeriod.label}
+                                    {t('subscription.baseTariff')}:{' '}
+                                    {periodLabel(selectedTariffPeriod.days)}
                                   </span>
                                   <span>
                                     {formatPrice(selectedTariffPeriod.base_tariff_price_kopeks)}
@@ -655,7 +647,7 @@ export function TariffPurchaseForm({
                               <div className="flex justify-between text-sm text-dark-300">
                                 <span>
                                   {t('subscription.summary.period', {
-                                    label: selectedTariffPeriod.label,
+                                    label: periodLabel(selectedTariffPeriod.days),
                                   })}
                                 </span>
                                 <div className="flex items-center gap-2">

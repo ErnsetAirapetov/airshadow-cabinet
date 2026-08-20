@@ -292,8 +292,21 @@ describe('остальное продление перенесено как ес
   });
 
   it('цена за месяц и скидка периода остались', () => {
-    expect(page).toContain('getMonthlyPriceKopeks(price.priceKopeks, period.periodDays)');
-    expect(page).toContain('price.discountPercent > 0');
-    expect(page).toContain('price.originalPriceKopeks');
+    // ⚠️ С #71 разметка сроков уехала в общий компонент, а страница считает
+    // только числа и отдаёт их пропами. Сама цена за месяц не потерялась —
+    // её рисует `PeriodOptionList`, и сторож единственности этой разметки
+    // живёт рядом с ним (`purchase/periodOptions.test.ts`).
+    expect(page).toContain('<PeriodOptionList');
+    expect(page).toContain('discountPercent: price.discountPercent');
+    expect(page).toContain('originalPriceKopeks: price.originalPriceKopeks');
+    expect(page).toContain('priceKopeks: price.priceKopeks');
+  });
+
+  it('нехватка баланса по-прежнему считается страницей, а не компонентом', () => {
+    // ⚠️ Баланс знает страница — у формы покупки его нет вовсе, и вшей общий
+    // компонент эту проверку внутрь, он бы потребовал баланс там, где его
+    // никто не спрашивает. Поэтому в компонент уходит уже готовая недостача.
+    expect(page).toContain('canAfford ? null : missingKopeks');
+    expect(page).toContain('resolveRenewOptionState(');
   });
 });

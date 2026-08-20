@@ -8,6 +8,7 @@ import type { PurchaseOptions, Subscription, Tariff } from '@/types';
 import { getGlassColors } from '@/utils/glassTheme';
 import { SIMPLE_NS } from '../../../i18n';
 import { resolveSalesMode } from '../../../pages/subscriptionPurchaseState';
+import { resolveCatalogBanners } from './catalogBanners';
 import { SwitchTariffSheet } from '../sheets/SwitchTariffSheet';
 import { ClassicPurchaseWizard } from './ClassicPurchaseWizard';
 import { TariffPickerGrid } from './TariffPickerGrid';
@@ -30,6 +31,11 @@ import { TariffPurchaseForm } from './TariffPurchaseForm';
  *
  * ⚠️ Различия мест вызова — ПРОПАМИ, ветки «на витрине / на экране оплаты»
  * внутри нет. Единственное различие сегодня — баннер `unsupportedTariffBanner`.
+ *
+ * ⚠️ Какие предупреждения показать — считает `resolveCatalogBanners` (#71), а не
+ * разметка. До #71 у двух баннеров были два независимых условия, и у подписки со
+ * снятым тарифом срабатывали ОБА: человек читал подряд «ваш тариф больше не
+ * поддерживается, выберите другой» и «подписка истекла, выберите тариф ниже».
  */
 
 export interface TariffCatalogSectionProps {
@@ -77,6 +83,15 @@ export function TariffCatalogSection({
   };
   useCloseOnSuccessNotification(handleCloseAllModals);
 
+  const banners = resolveCatalogBanners({
+    unsupportedTariff: unsupportedTariffBanner,
+    subscriptionExpired:
+      purchaseOptions !== undefined &&
+      'subscription_is_expired' in purchaseOptions &&
+      purchaseOptions.subscription_is_expired === true,
+    tariffSelected: showTariffPurchase,
+  });
+
   const {
     isTariffsMode,
     tariffs,
@@ -94,8 +109,9 @@ export function TariffCatalogSection({
           вложенный в неё, пропал бы вместе с ней — то есть ровно в том
           состоянии, ради которого заведён.
           ⚠️ Скрывается, когда человек уже выбрал тариф: на форме оплаты речь
-          идёт про новый тариф, и напоминание про старый там лишнее. */}
-      {unsupportedTariffBanner && !showTariffPurchase && (
+          идёт про новый тариф, и напоминание про старый там лишнее — это и
+          считает `resolveCatalogBanners`, своего условия у разметки нет. */}
+      {banners.unsupportedTariff && (
         <div
           className="rounded-[14px] p-4"
           role="status"
@@ -150,41 +166,42 @@ export function TariffCatalogSection({
               задаче #29), и экспертный режим блок себе вернул. Предупреждения
               об истёкшей и legacy-подписке остаются — они несут информацию. */}
 
-          {/* Expired subscription notice */}
-          {purchaseOptions &&
-            'subscription_is_expired' in purchaseOptions &&
-            purchaseOptions.subscription_is_expired && (
-              <div
-                className="mb-6 rounded-[14px] p-4"
-                style={{
-                  background: 'linear-gradient(135deg, rgba(255,59,92,0.08), rgba(255,184,0,0.06))',
-                  border: '1px solid rgba(255,59,92,0.15)',
-                }}
-              >
-                <div className="flex items-start gap-3">
+          {/* Апстримный блок «подписка истекла».
+              ⚠️ Молчит, когда сказать есть что точнее: у подписки со снятым
+              тарифом баннер выше говорит ровно то же самое («выберите тариф»),
+              но называет причину. Решение — в `resolveCatalogBanners` (#71). */}
+          {banners.expired && (
+            <div
+              className="mb-6 rounded-[14px] p-4"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255,59,92,0.08), rgba(255,184,0,0.06))',
+                border: '1px solid rgba(255,59,92,0.15)',
+              }}
+            >
+              <div className="flex items-start gap-3">
+                <div
+                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px]"
+                  style={{
+                    background: 'rgba(255,59,92,0.12)',
+                    color: 'rgb(var(--color-critical-500))',
+                  }}
+                >
+                  <ExclamationIcon className="h-4 w-4" />
+                </div>
+                <div>
                   <div
-                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px]"
-                    style={{
-                      background: 'rgba(255,59,92,0.12)',
-                      color: 'rgb(var(--color-critical-500))',
-                    }}
+                    className="text-sm font-semibold"
+                    style={{ color: 'rgb(var(--color-critical-500))' }}
                   >
-                    <ExclamationIcon className="h-4 w-4" />
+                    {t('subscription.expiredBanner.title')}
                   </div>
-                  <div>
-                    <div
-                      className="text-sm font-semibold"
-                      style={{ color: 'rgb(var(--color-critical-500))' }}
-                    >
-                      {t('subscription.expiredBanner.title')}
-                    </div>
-                    <div className="mt-1 text-[12px] text-dark-50/40">
-                      {t('subscription.expiredBanner.selectTariff')}
-                    </div>
+                  <div className="mt-1 text-[12px] text-dark-50/40">
+                    {t('subscription.expiredBanner.selectTariff')}
                   </div>
                 </div>
               </div>
-            )}
+            </div>
+          )}
 
           {/* Legacy subscription notice */}
           {subscription && !subscription.is_trial && !subscription.tariff_id && (

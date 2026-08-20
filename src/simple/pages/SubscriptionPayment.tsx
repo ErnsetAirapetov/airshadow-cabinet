@@ -4,15 +4,14 @@ import { useTranslation } from 'react-i18next';
 import { Navigate, useNavigate, useParams } from 'react-router';
 
 import { subscriptionApi } from '@/api/subscription';
-import { useCurrency } from '@/hooks/useCurrency';
 import { usePromoDiscount } from '@/hooks/usePromoDiscount';
 import { useTheme } from '@/hooks/useTheme';
 import { useHaptic } from '@/platform';
 import { getGlassColors } from '@/utils/glassTheme';
-import { getMonthlyPriceKopeks } from '@/utils/pricing';
 import { BalanceWidget, useBalanceQuery } from '../components/BalanceWidget';
 import InsufficientBalancePrompt from '../components/InsufficientBalancePrompt';
 import { WebBackButton } from '../components/WebBackButton';
+import { PeriodOptionList } from '../components/subscription/purchase/PeriodOptionList';
 import { TariffCatalogSection } from '../components/subscription/purchase/TariffCatalogSection';
 import { resolvePaymentPlan, resolvePaymentTitleKey, resolvePeriodPrice } from './paymentState';
 import {
@@ -56,7 +55,6 @@ export function SimpleSubscriptionPayment() {
   const queryClient = useQueryClient();
   const { isDark } = useTheme();
   const g = getGlassColors(isDark);
-  const { formatAmount, currencySymbol } = useCurrency();
   const { applyPromoDiscount } = usePromoDiscount();
   const { impact } = useHaptic();
 
@@ -244,9 +242,13 @@ export function SimpleSubscriptionPayment() {
           unsupportedTariffBanner={plan.unsupportedTariffBanner}
         />
       ) : (
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {plan.periods.map((period) => {
-            const isSelected = selectedPeriod === period.periodDays;
+        /* ⚠️ Разметка списка сроков ОДНА на весь простой режим (#71) — та же,
+           что рисует форма покупки тарифа. До #71 она была написана здесь
+           вторым разом и разошлась с первой молча, вплоть до разных подписей
+           («30 дней» против «1 месяц»). Своей вёрстки периода у страницы
+           больше нет: она собирает только числа. */
+        <PeriodOptionList
+          options={plan.periods.map((period) => {
             // ⚠️ Промо-скидка применяется ТОЛЬКО к ценам каталога: в ценах
             // продления бэкенд её уже учёл, и второй раз она стоила бы
             // расхождения показанной суммы со списанной.
@@ -260,71 +262,22 @@ export function SimpleSubscriptionPayment() {
               renewBalance.kopeks,
               price.priceKopeks,
             );
-            const perMonth = getMonthlyPriceKopeks(price.priceKopeks, period.periodDays);
 
-            return (
-              <button
-                key={period.periodDays}
-                onClick={() => {
-                  impact('light');
-                  setSelectedPeriod(period.periodDays);
-                  setError(null);
-                }}
-                className="w-full rounded-2xl border p-4 text-left transition-all duration-200"
-                style={{
-                  background: isSelected
-                    ? isDark
-                      ? 'rgba(var(--color-accent-400), 0.08)'
-                      : 'rgba(var(--color-accent-400), 0.05)'
-                    : g.cardBg,
-                  borderColor: isSelected ? 'rgb(var(--color-accent-400))' : g.cardBorder,
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="text-base font-semibold" style={{ color: g.text }}>
-                      {period.periodDays} {t('subscription.days', 'дней')}
-                    </span>
-                    {price.discountPercent > 0 && (
-                      <span className="ml-2 rounded-full bg-success-400/15 px-2 py-0.5 text-[10px] font-semibold text-success-400">
-                        -{price.discountPercent}%
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-right">
-                    <div className="text-base font-semibold" style={{ color: g.text }}>
-                      {price.priceKopeks === 0
-                        ? t('subscription.free', 'Бесплатно')
-                        : `${formatAmount(price.priceKopeks / 100)} ${currencySymbol}`}
-                    </div>
-                    {perMonth !== null && (
-                      <div className="text-[11px]" style={{ color: g.textSecondary }}>
-                        {formatAmount(perMonth / 100)} {currencySymbol}/
-                        {t('subscription.month', 'мес')}
-                      </div>
-                    )}
-                    {price.originalPriceKopeks && (
-                      <div className="text-[11px] line-through" style={{ color: g.textSecondary }}>
-                        {formatAmount(price.originalPriceKopeks / 100)} {currencySymbol}
-                      </div>
-                    )}
-                  </div>
-                </div>
-                {!canAfford && (
-                  <div className="mt-1 text-[11px] text-error-400">
-                    {t(
-                      'subscription.insufficientBalanceAmount',
-                      'Недостаточно средств. Не хватает {{missing}}',
-                      {
-                        missing: `${formatAmount(missingKopeks / 100)} ${currencySymbol}`,
-                      },
-                    )}
-                  </div>
-                )}
-              </button>
-            );
+            return {
+              days: period.periodDays,
+              priceKopeks: price.priceKopeks,
+              originalPriceKopeks: price.originalPriceKopeks,
+              discountPercent: price.discountPercent,
+              missingKopeks: canAfford ? null : missingKopeks,
+            };
           })}
-        </div>
+          selectedDays={selectedPeriod}
+          onSelect={(days) => {
+            impact('light');
+            setSelectedPeriod(days);
+            setError(null);
+          }}
+        />
       )}
 
       {/* Insufficient balance prompt */}
