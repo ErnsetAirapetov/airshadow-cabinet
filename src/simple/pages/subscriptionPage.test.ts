@@ -238,7 +238,13 @@ describe('разбор страницы после переработки уда
 
   it('разбор шаблонов классов работает — иначе «склеек нет» проходит на пустоте', () => {
     expect(classNameTemplates(code).length).toBeGreaterThan(0);
-    expect(classNameTemplates(activeCard).length).toBeGreaterThan(0);
+    // ⚠️ Карточка главной в паре больше не участвует (#72): после переработки
+    // компоновки шаблонных классов в ней не осталось ни одного — последний жил
+    // у кнопки обновления трафика, а её вращение теперь включает проп
+    // `spinning` самой иконки. Файл всё равно обязан быть прочитан, иначе
+    // «склеек нет» ниже проходило бы на пустой строке.
+    expect(activeCard.length).toBeGreaterThan(1000);
+    expect(activeCard).toContain('className="');
     // Самопроверка детектора на синтетическом дефекте и на исправном шаблоне.
     expect(gluedClassTemplates('className={`p-3 duration-300${x ? "a" : ""}`}')).toHaveLength(1);
     expect(gluedClassTemplates('className={`p-3 duration-300 ${x ? "a" : ""}`}')).toHaveLength(0);
@@ -409,11 +415,14 @@ describe('пункт 4b: склейка классов починена в об�
     expect(gluedClassTemplates(activeCard)).toEqual([]);
   });
 
-  it('шаблоны классов в обоих файлах есть, а не просто «склейки нет»', () => {
+  it('шаблоны классов на странице есть, а не просто «склейки нет»', () => {
     // Парная проверка: пустой файл склеек тоже не содержит. Сам класс
     // состояния переехал в общий компонент (#61) и сторожится там.
     expect(classNameTemplates(code).length).toBeGreaterThan(0);
-    expect(classNameTemplates(activeCard).length).toBeGreaterThan(0);
+    // ⚠️ В карточке главной шаблонов классов не осталось вовсе (#72), поэтому
+    // пара для неё — не «шаблоны есть», а «файл прочитан»: см. одноимённую
+    // проверку в блоке разбора выше.
+    expect(activeCard.length).toBeGreaterThan(1000);
   });
 });
 

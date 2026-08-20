@@ -3,8 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import type { UseMutationResult } from '@tanstack/react-query';
 import TrafficProgressBar from './TrafficProgressBar';
-import Sparkline from './Sparkline';
-import { useAnimatedNumber } from '@/hooks/useAnimatedNumber';
 import { useTheme } from '@/hooks/useTheme';
 import { useTrafficZone } from '@/hooks/useTrafficZone';
 import { formatTraffic } from '@/utils/formatTraffic';
@@ -23,6 +21,26 @@ import { resolveRenewHref, resolveTimeLeftDisplay } from '../../pages/dashboardS
  * упрощено относительно апстрима: убран индикатор зоны расхода (осталась метка
  * пробного периода), убрана ссылка «Посмотреть подписку», остаток дней
  * кликабелен и ведёт на продление.
+ *
+ * ⚠️ Порядок блоков перебран в #72 и держится на одном правиле: сверху то, зачем
+ * человек пришёл. Метка триала → плитки «Тариф» и «Осталось» → кнопка
+ * «Подключить устройство» → компактный расход трафика.
+ *
+ * Что удалено там же и почему — чтобы следующий заход не вернул это обратно:
+ *
+ *   - **шапка с заголовком «Расход трафика» и процентом в 38-м кегле справа.**
+ *     Это и был ложный акцент главной: самая громкая цифра экрана — о трафике,
+ *     хотя приходят сюда за балансом и кнопкой подключения. Цифра расхода
+ *     осталась в компактном блоке, где ей и место;
+ *   - **некомпактный `TrafficProgressBar` и отдельная строка кнопки
+ *     обновления.** Обе роли забрал компактный блок — три блока об одном и том
+ *     же занимали половину высоты карточки;
+ *   - **`Sparkline` вместе с `dailyUsage`.** Массив объявлялся пустым литералом
+ *     («placeholder, пока API не отдаёт посуточный расход»), условие
+ *     `dailyUsage.length >= 2` не выполнялось никогда, блок не рендерился ни
+ *     разу. Отдаст бэкенд посуточный расход — блок пишется заново по живым
+ *     данным; копия компонента в простом режиме удалена вместе с ним, апстримный
+ *     оригинал остался экспертному режиму нетронутым.
  */
 
 interface SubscriptionCardActiveProps {
@@ -52,8 +70,9 @@ export default function SubscriptionCardActive({
   const usedPercent = trafficData?.traffic_used_percent ?? subscription.traffic_used_percent;
   const usedGb = trafficData?.traffic_used_gb ?? subscription.traffic_used_gb;
   const isUnlimited = trafficData?.is_unlimited ?? subscription.traffic_limit_gb === 0;
+  // Рамка карточки по-прежнему красится зоной расхода — крупная цифра процента
+  // ушла (#72), сам сигнал остался.
   const zone = useTrafficZone(usedPercent);
-  const animatedPercent = useAnimatedNumber(usedPercent);
 
   const formattedDate = new Date(subscription.end_date).toLocaleDateString(uiLocale());
   const daysLeft = subscription.days_left;
@@ -81,12 +100,14 @@ export default function SubscriptionCardActive({
           ? t('subscription.hours')
           : t('subscription.minutes');
 
-  // Sparkline placeholder data (hidden until API provides daily usage)
-  const dailyUsage: number[] = [];
-
   return (
+    // ⚠️ Внутренние поля — КЛАССАМИ, а не инлайном (#72): на мобилке они
+    // уменьшены (20/20/16 вместо 28/28/24), на `sm:` и шире остались прежними, а
+    // инлайн-стиль брейкпоинтов не умеет. Это половина резерва высоты, из
+    // которого базовая главная влезает в 390×844; вторая половина — ритм самой
+    // страницы, см. `pages/Dashboard.tsx`.
     <div
-      className="relative overflow-hidden rounded-3xl lg:backdrop-blur-xl"
+      className="relative overflow-hidden rounded-3xl p-5 pb-4 sm:p-7 sm:pb-6 lg:backdrop-blur-xl"
       style={{
         background: g.cardBg,
         border: subscription.is_trial
@@ -94,101 +115,43 @@ export default function SubscriptionCardActive({
           : isDark
             ? `1px solid ${g.cardBorder}`
             : `1px solid rgba(${zone.mainVarRaw}, 0.14)`,
-        padding: '28px 28px 24px',
         boxShadow: isDark
           ? g.shadow
           : `0 2px 16px rgba(${zone.mainVarRaw}, 0.07), 0 0 0 1px rgba(${zone.mainVarRaw}, 0.03)`,
       }}
     >
-      {/* Decorative trial-shimmer border + ambient background glow removed.
-          Trial state is conveyed by the badge in the header; ambient glow
-          carried no information and ate visual attention. */}
-
-      {/* ─── Header ─── */}
-      <div className="mb-7 flex items-start justify-between">
-        <div>
-          {/* Индикатор зоны расхода убран — см. комментарий в Subscription.tsx.
-              Остаётся только метка пробного периода. */}
-          <div className="mb-1 flex items-center gap-2">
-            {subscription.is_trial && (
-              <span className="inline-flex items-center gap-1 rounded-md border border-accent-400/25 bg-accent-400/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-accent-400">
-                <svg
-                  width="10"
-                  height="10"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-                {t('subscription.trialStatus')}
-              </span>
-            )}
-          </div>
-
-          {/* Title */}
-          <h2 className="text-lg font-bold tracking-tight text-dark-50">
-            {t('dashboard.trafficUsageTitle')}
-          </h2>
+      {/* ─── Метка пробного периода ───
+           Всё, что осталось от шапки (#72). Заголовок «Расход трафика» и крупный
+           процент справа удалены НАМЕРЕННО, и возвращать их не надо: 38-й кегль
+           делал расход самым громким элементом главной, хотя человек приходит
+           сюда за балансом и кнопкой «Подключить устройство». Сама цифра расхода
+           не потерялась — она в компактном блоке внизу карточки, рядом с
+           прогресс-баром, которому и принадлежит. */}
+      {subscription.is_trial && (
+        <div className="mb-3 flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-md border border-accent-400/25 bg-accent-400/10 px-2 py-0.5 font-mono text-[9px] font-bold uppercase tracking-widest text-accent-400">
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
+              <path
+                d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            {t('subscription.trialStatus')}
+          </span>
         </div>
-
-        {/* Big percentage / infinity */}
-        <div className="text-right">
-          {isUnlimited ? (
-            <>
-              <div
-                className="font-display text-[28px] font-extrabold leading-none tracking-tight"
-                style={{ color: zone.mainVar }}
-              >
-                &#8734;
-              </div>
-              <div className="mt-1 font-mono text-[11px] text-dark-50/30">
-                {formatTraffic(usedGb)} {t('dashboard.usedSuffix')}
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="font-display text-[38px] font-extrabold leading-none tracking-tight text-dark-50">
-                {animatedPercent.toFixed(0)}
-                <span className="ml-px text-lg font-medium text-dark-50/35">%</span>
-              </div>
-              <div className="mt-0.5 font-mono text-[11px] text-dark-50/30">
-                {formatTraffic(usedGb)} / {formatTraffic(subscription.traffic_limit_gb)}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-
-      {/* ─── Progress Bar ─── */}
-      <div className="mb-6">
-        <TrafficProgressBar
-          usedGb={usedGb}
-          limitGb={subscription.traffic_limit_gb}
-          percent={usedPercent}
-          isUnlimited={isUnlimited}
-        />
-      </div>
-
-      {/* ─── Connect Device Button ───
-           Общий компонент с страницей подписки (#61): до него копий было две, и
-           после #59 они разошлись — акцент достался только странице. Различия
-           мест вызова здесь ровно два, и оба пропами: отступ и онбординг. */}
-      <ConnectDeviceButton
-        subscription={subscription}
-        connectedDevices={connectedDevices}
-        className="mb-2.5"
-        onboardingId="connect-devices"
-      />
+      )}
 
       {/* ─── Stats row: Tariff + Days Left ─── */}
-      <div className="mb-5 flex gap-2.5">
+      <div className="mb-2.5 flex gap-2.5">
         {/* Tariff badge — clickable. Neutral chrome: the tariff name has
             no traffic-zone semantics, so tinting it by the traffic zone
             (DESIGN.md Status-Hue Lockout) was wrong. */}
@@ -279,38 +242,65 @@ export default function SubscriptionCardActive({
         </Link>
       </div>
 
-      {/* ─── Traffic Refresh ─── */}
-      <div className="mb-5 flex items-center px-0.5">
-        <button
-          onClick={() => refreshTrafficMutation.mutate()}
-          disabled={refreshTrafficMutation.isPending || trafficRefreshCooldown > 0}
-          className="flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium text-dark-50/35 transition-colors hover:bg-dark-50/[0.05] hover:text-dark-50/50 disabled:cursor-not-allowed disabled:opacity-50"
-          aria-label={t('common.refresh')}
-        >
-          <RefreshIcon
-            className={`h-3 w-3 ${refreshTrafficMutation.isPending ? 'animate-spin' : ''}`}
-          />
-          {trafficRefreshCooldown > 0 ? `${trafficRefreshCooldown}s` : t('common.refresh')}
-        </button>
-      </div>
+      {/* ─── Connect Device Button ───
+           Общий компонент с страницей подписки (#61): до него копий было две, и
+           после #59 они разошлись — акцент достался только странице. Различия
+           мест вызова здесь ровно два, и оба пропами: отступ и онбординг.
 
-      {/* ─── Sparkline ─── */}
-      {dailyUsage.length >= 2 && (
-        <div
-          className="rounded-[14px] p-3.5 pb-3"
-          style={{ background: g.innerBg, border: `1px solid ${g.innerBorder}` }}
-        >
-          <div className="mb-2.5 flex items-center justify-between">
-            <span className="text-[11px] font-medium uppercase tracking-wider text-dark-50/40">
-              {t('dashboard.usageLast14Days')}
+           ⚠️ Стоит ПОД плитками и НАД трафиком (#72): это главное действие
+           экрана, и оно должно попадать в первый экран телефона раньше цифр
+           расхода. */}
+      <ConnectDeviceButton
+        subscription={subscription}
+        connectedDevices={connectedDevices}
+        className="mb-4 sm:mb-5"
+        onboardingId="connect-devices"
+      />
+
+      {/* ─── Компактный расход трафика ───
+           По образцу страницы подписки (`pages/Subscription.tsx`): строка-подпись,
+           «использовано / лимит», кнопка обновления и тонкий бар под ними.
+
+           ⚠️ Заменяет собой ТРИ прежних блока — шапку с крупным процентом,
+           некомпактный прогресс-бар и отдельную строку кнопки обновления. Все три
+           говорили об одном и том же, занимая половину высоты карточки, а
+           38-й кегль процента делал расход самым громким элементом главной. Не
+           «убрали трафик», а перестали повторять его трижды. */}
+      <div>
+        <div className="mb-2.5 flex items-center justify-between">
+          <span className="text-[11px] font-medium uppercase tracking-wider text-dark-50/40">
+            {t('subscription.traffic')}
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[11px] text-dark-50/30">
+              {isUnlimited
+                ? formatTraffic(usedGb)
+                : `${formatTraffic(usedGb)} / ${formatTraffic(subscription.traffic_limit_gb)}`}
             </span>
-            <span className="font-mono text-[11px] text-dark-50/25">
-              {t('dashboard.maxUsage', { amount: formatTraffic(Math.max(...dailyUsage)) })}
-            </span>
+            <button
+              onClick={() => refreshTrafficMutation.mutate()}
+              disabled={refreshTrafficMutation.isPending || trafficRefreshCooldown > 0}
+              className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium text-dark-50/30 transition-colors hover:bg-dark-50/[0.05] hover:text-dark-50/50 disabled:cursor-not-allowed disabled:opacity-50"
+              aria-label={t('common.refresh')}
+            >
+              <RefreshIcon className="h-3 w-3" spinning={refreshTrafficMutation.isPending} />
+              {trafficRefreshCooldown > 0 ? `${trafficRefreshCooldown}s` : t('common.refresh')}
+            </button>
           </div>
-          <Sparkline data={dailyUsage} width={440} height={44} color={zone.mainVar} />
         </div>
-      )}
+        {subscription.traffic_reset_mode && subscription.traffic_reset_mode !== 'NO_RESET' && (
+          <div className="mb-2 text-[10px] text-dark-50/25">
+            {t(`subscription.trafficReset.${subscription.traffic_reset_mode}`)}
+          </div>
+        )}
+        <TrafficProgressBar
+          usedGb={usedGb}
+          limitGb={subscription.traffic_limit_gb}
+          percent={usedPercent}
+          isUnlimited={isUnlimited}
+          compact
+        />
+      </div>
     </div>
   );
 }
