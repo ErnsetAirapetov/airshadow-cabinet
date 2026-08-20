@@ -228,8 +228,31 @@ describe('разбор удался', () => {
   });
 });
 
-describe('непродлеваемый статус: экран даёт переход, а не продление (#67)', () => {
-  it('ни одно состояние с таким статусом не зовёт продление', () => {
+describe('экран даёт переход, а не оплату (#67, #70)', () => {
+  it('НИ ОДНО состояние с блоком действия не зовёт оплату с карточки (#70)', () => {
+    // ⚠️ Сердце #70, и смотрится оно С ЭКРАНА: страница и главная рисуют один
+    // блок, поэтому правило обязано держаться на всех состояниях, у которых он
+    // вообще виден, а не только на непродлеваемых. Единственное исключение —
+    // приостановленный суточный тариф: там возобновление списаний, а не покупка
+    // срока, и эту ветку задача не трогает.
+    const shown = STATES.filter(
+      ({ subscription }) => resolveSubscriptionCardActions(subscription).expiredAction,
+    );
+
+    expect(shown.length).toBeGreaterThan(0);
+
+    for (const { name, subscription } of shown) {
+      const operation = resolveExpiredRenewOperation(subscription);
+      const navigates = operation.kind === 'openPayment' || operation.kind === 'openPurchase';
+      const resumes = operation.kind === 'resumeDaily' && isPausedDailySubscription(subscription);
+
+      expect(`${name}: ${navigates || resumes} (${operation.kind})`).toBe(
+        `${name}: true (${operation.kind})`,
+      );
+    }
+  });
+
+  it('ни одно состояние с непродлеваемым статусом не зовёт продление', () => {
     // ⚠️ Правило смотрится с ЭКРАНА, а не только из чистого модуля: страница и
     // главная рисуют один блок действия, поэтому запрет обязан держаться на всех
     // состояниях, у которых этот блок вообще виден.
@@ -461,6 +484,8 @@ describe('блок паузы у истёкшей подписки не рису
 const PAGE = 'src/simple/pages/Subscription.tsx';
 /** Общий блок действия — там и живут якоря, запрещённые странице. */
 const ACTION_BLOCK = 'src/simple/components/subscription/ExpiredSubscriptionAction.tsx';
+/** Апстримная карточка — пара «искомые строки в коде вообще встречаются». */
+const UPSTREAM_CARD = 'src/components/dashboard/SubscriptionCardExpired.tsx';
 
 function read(path: string): string {
   // ⚠️ `\r\n` → `\n`: рабочая копия на Windows, а разбор ниже построчный.
@@ -475,6 +500,7 @@ function stripComments(source: string): string {
 const pageSource = read(PAGE);
 const pageCode = stripComments(pageSource);
 const actionBlockCode = stripComments(read(ACTION_BLOCK));
+const upstreamCardCode = stripComments(read(UPSTREAM_CARD));
 
 /**
  * Блоки ВЕРХНЕГО УРОВНЯ страницы — вместе с условиями их отрисовки.
@@ -542,9 +568,13 @@ const PAGE_TOP_LEVEL_BLOCKS = [
 ];
 
 /**
- * Действия с подпиской — переход на пополнение и вызовы продления. Все три
- * записаны ровно в общем блоке; на странице их быть не должно ни в одном
- * блоке, включая уже существующие.
+ * Оплата с карточки — переход на пополнение и вызовы покупки срока.
+ *
+ * ⚠️ С #70 их нет НИ НА СТРАНИЦЕ, НИ В БЛОКЕ: действие истёкшей подписки стало
+ * переходом на экран оплаты, где цены известны и где человеку называют точную
+ * нехватку. Прежде эти три строки жили в блоке, и парой «иголки настоящие»
+ * служил он сам; теперь такой парой служит апстримная карточка, которая держит
+ * тот же механизм целиком.
  */
 const SUBSCRIPTION_ACTION_ANCHORS = [
   '/balance/top-up',
@@ -604,12 +634,22 @@ describe('раскладка страницы закреплена (#65, кру�
   });
 });
 
-describe('своих якорей действия с подпиской у страницы нет (#65, круг 2)', () => {
-  it('в общем блоке эти якоря есть — иначе запрет ниже пустой', () => {
+describe('оплаты с карточки нет ни на странице, ни в блоке (#65 круг 2, #70)', () => {
+  it('в апстримной карточке эти якоря есть — иначе запреты ниже пустые', () => {
     // Пара «разбор удался»: строки настоящие, а не опечатки, при которых
-    // «на странице их нет» проходит всегда.
+    // «их здесь нет» проходит всегда.
+    expect(upstreamCardCode.length).toBeGreaterThan(3000);
     for (const anchor of SUBSCRIPTION_ACTION_ANCHORS) {
-      expect(`${anchor}: ${actionBlockCode.includes(anchor)}`).toBe(`${anchor}: true`);
+      expect(`${anchor}: ${upstreamCardCode.includes(anchor)}`).toBe(`${anchor}: true`);
+    }
+  });
+
+  it('в общем блоке их нет — он ведёт на экран оплаты, а не платит (#70)', () => {
+    // ⚠️ Мутация «вернуть блоку продление» краснеет здесь. Цену продления блок
+    // не знает: она приходит из `renewal-options` либо из каталога тарифа и
+    // зависит от выбранного срока.
+    for (const anchor of SUBSCRIPTION_ACTION_ANCHORS) {
+      expect(`${anchor}: ${actionBlockCode.includes(anchor)}`).toBe(`${anchor}: false`);
     }
   });
 

@@ -5,7 +5,6 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, useParams } from 'react-router';
 import { subscriptionApi } from '@/api/subscription';
 import { DEVICE_ALIAS_MAX_LENGTH } from '@/constants/devices';
-import { useBalanceQuery } from '../components/BalanceWidget';
 import { WebBackButton } from '../components/WebBackButton';
 import { useDestructiveConfirm } from '@/platform/hooks/useNativeDialog';
 import TrafficProgressBar from '../components/dashboard/TrafficProgressBar';
@@ -365,14 +364,6 @@ export function SimpleSubscription() {
     staleTime: 0,
     refetchOnMount: 'always',
   });
-
-  // ⚠️ Баланс берётся ОБЩИМ запросом `useBalanceQuery()`, а не своей копией
-  // четырёх строк (#65). Ключ, `queryFn` и `staleTime` объявлены один раз рядом
-  // с виджетом баланса, поэтому наблюдатели одного ключа не могут разъехаться
-  // молча: react-query дедуплицирует запрос с главной, а мутация продления в
-  // блоке действия инвалидирует именно `['balance']` — на своём ключе кнопка не
-  // заметила бы пополнения и залипла бы на «Пополнить баланс».
-  const { data: balanceData, isPending: isBalancePending } = useBalanceQuery();
 
   const isTariffsMode = purchaseOptions?.sales_mode === 'tariffs';
   // Состав блока «Дополнительные опции» — чистая функция (#61). Условий в JSX
@@ -1061,8 +1052,6 @@ export function SimpleSubscription() {
               {cardActions.expiredAction && (
                 <ExpiredSubscriptionAction
                   subscription={subscription}
-                  balanceKopeks={balanceData?.balance_kopeks ?? 0}
-                  isBalanceLoading={isBalancePending}
                   renewLabelKey={PAGE_RENEW_LABEL_KEY}
                   className="mb-5"
                 />
