@@ -4,6 +4,7 @@ import {
   CreditCardIcon,
   HomeIcon,
   InfoIcon,
+  NewsIcon,
   SubscriptionIcon,
   SupportIcon,
   UserIcon,
@@ -32,6 +33,9 @@ export const SIMPLE_NAV_ICONS: Record<SimpleNavPath, SimpleNavIcon> = {
   '/support': SupportIcon,
   '/profile': UserIcon,
   '/info': InfoIcon,
+  // `NewsIcon` — апстримная иконка из открытого каталога `components/icons`; ту же
+  // рисует апстримная лента новостей. Своей копии не заводим (#74).
+  '/news': NewsIcon,
 };
 
 /**

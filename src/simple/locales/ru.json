@@ -13,6 +13,13 @@
     "retry": "Повторить",
     "timeLeftUnderMinute": "Меньше минуты"
   },
+  "news": {
+    "emptyTitle": "Пока новостей нет",
+    "emptyHint": "Как только появятся — покажем здесь.",
+    "errorTitle": "Не удалось загрузить новости",
+    "errorHint": "Похоже, пропала связь с сервером.",
+    "retry": "Повторить"
+  },
   "balance": {
     "promocode": {
       "expiredLabel": "Истекла",

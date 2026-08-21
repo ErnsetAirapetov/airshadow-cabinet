@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import { useUiMode } from '@/store/mode';
 import { SimpleBalance } from './pages/Balance';
 import { SimpleDashboard } from './pages/Dashboard';
+import { SimpleNews } from './pages/News';
 import { SimpleSubscription } from './pages/Subscription';
 import { SimpleSubscriptionPayment } from './pages/SubscriptionPayment';
 import { SimpleSubscriptionPurchase } from './pages/SubscriptionPurchase';
@@ -55,6 +56,11 @@ export const simpleRoutes: SimpleRoute[] = [
   // список `UPSTREAM_LITERAL_PATHS` в `routeMatch.ts` (дефект #53).
   { path: '/balance/top-up', component: SimpleTopUpMethodSelect },
   { path: '/balance/top-up/:methodId', component: SimpleTopUpAmount },
+  // ⚠️ Единственная запись реестра, у которой апстримного маршрута НЕ БЫЛО: путь
+  // `/news` заведён нашим патчем в `App.tsx` (задача #74). У остальных записей
+  // апстримный маршрут существует и подменяется страница; здесь маршрут заведён
+  // ради подмены. Уберут патч в `App.tsx` — покраснеет сторож покрытия шва.
+  { path: '/news', component: SimpleNews },
   { path: '/subscription/purchase', component: SimpleSubscriptionPurchase },
   // ⚠️ Адрес апстримного СПИСКА подписок отдан странице ПОДПИСКИ, и это решение
   // владельца (#60), а не промах. Пункт меню «Подписка» ведёт сюда; апстримный
