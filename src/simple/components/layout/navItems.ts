@@ -45,6 +45,15 @@ export const SIMPLE_NAV_ITEMS = [
   { path: '/support', labelKey: 'nav.support', inBottomNav: true },
   { path: '/profile', labelKey: 'nav.profile', inBottomNav: false },
   { path: '/info', labelKey: 'nav.info', inBottomNav: false },
+  // ⚠️ Подпись — АПСТРИМНЫЙ ключ `news.title` («Новости и обновления»), а не
+  // `nav.news`: такого ключа в апстримных локалях нет, а заводить его в нашем
+  // неймспейсе нельзя — потребители печатают `labelKey` апстримным `t`, и один
+  // пункт из шести читался бы иначе, чем остальные. Тем же ключом подписан
+  // заголовок самой страницы (`pages/News.tsx`), так что разъехаться им нечем.
+  //
+  // Пункт стоит последним и БЕЗ `inBottomNav`: нижняя панель остаётся четвёркой
+  // (решение владельца, #74). Позиция в списке меняется одной строкой.
+  { path: '/news', labelKey: 'news.title', inBottomNav: false },
 ] as const satisfies readonly SimpleNavItem[];
 
 /**

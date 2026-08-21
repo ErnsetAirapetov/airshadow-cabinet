@@ -70,13 +70,17 @@ describe('состав сквозного списка', () => {
     expect(PASSTHROUGH_PATHS.length).toBeGreaterThan(0);
   });
 
-  it('список — ровно одиннадцать путей, назначенных владельцем', () => {
+  it('список — ровно двенадцать путей, назначенных владельцем', () => {
     // Сторож состава. Список — решение владельца (#64), а не догадка
     // исполнителя: добавление или удаление адреса обязано быть осознанным и
     // видным в дифе, поэтому сверка полная, а не «содержит».
     //
     // Путей было двенадцать; `/wheel` ушёл в #66 вместе с баннером колеса —
     // сторож обновлён, а не ослаблен. Обоснование см. в описании ниже.
+    //
+    // `/news/:slug` пришёл в #74 вместе с простой страницей `/news`: каждая
+    // карточка ленты ведёт в апстримную статью, и без записи клик выбрасывал бы
+    // человека из простого режима — ровно тот дефект, ради которого список заведён.
     expect([...PASSTHROUGH_PATHS]).toEqual([
       '/connection',
       '/connection/qr',
@@ -87,6 +91,7 @@ describe('состав сквозного списка', () => {
       '/profile/accounts',
       '/info',
       '/info/:slug',
+      '/news/:slug',
       '/gift',
       '/gift/result',
     ]);
@@ -173,7 +178,7 @@ describe('каждая запись — существующий маршрут 
   it('ни одна запись сквозного списка не ведёт в никуда', () => {
     const missing = PASSTHROUGH_PATHS.filter((path) => !protectedPaths.has(path));
 
-    // Пусто — значит все одиннадцать адресов существуют и стоят под швом.
+    // Пусто — значит все двенадцать адресов существуют и стоят под швом.
     // Апстрим уберёт любой из них — здесь и покраснеет.
     expect(missing).toEqual([]);
   });
@@ -254,12 +259,15 @@ describe('сквозной список и реестр не пересекаю�
 });
 
 describe('isPassthroughPath', () => {
-  it('отвечает «да» на все одиннадцать адресов владельца', () => {
-    // Литеральные записи проверяются собой, запись с параметром — реальным
-    // адресом статьи: `/info/:slug` в рантайме никогда не встретится буквально.
-    const probes = PASSTHROUGH_PATHS.map((path) =>
-      path === '/info/:slug' ? '/info/kak-podklyuchit' : path,
-    );
+  it('отвечает «да» на все двенадцать адресов владельца', () => {
+    // Литеральные записи проверяются собой, записи с параметром — реальными
+    // адресами статей: `/info/:slug` и `/news/:slug` в рантайме никогда не
+    // встретятся буквально.
+    const probes = PASSTHROUGH_PATHS.map((path) => {
+      if (path === '/info/:slug') return '/info/kak-podklyuchit';
+      if (path === '/news/:slug') return '/news/novyj-server';
+      return path;
+    });
 
     expect(probes.filter((probe) => !isPassthroughPath(probe))).toEqual([]);
   });
@@ -269,7 +277,6 @@ describe('isPassthroughPath', () => {
     // потому молчалив: человек увидит апстримную админку в простой рамке.
     expect(isPassthroughPath('/admin')).toBe(false);
     expect(isPassthroughPath('/support')).toBe(false);
-    expect(isPassthroughPath('/news/kak-podklyuchit')).toBe(false);
     expect(isPassthroughPath('/contests')).toBe(false);
     // Главная — страница реестра, сквозным она быть не должна ни при каких.
     expect(isPassthroughPath('/')).toBe(false);
@@ -280,6 +287,7 @@ describe('isPassthroughPath', () => {
     // числе адреса, которых сегодня нет, а завтра апстрим заведёт.
     expect(isPassthroughPath('/profile/accounts/telegram')).toBe(false);
     expect(isPassthroughPath('/info/kak-podklyuchit/print')).toBe(false);
+    expect(isPassthroughPath('/news/novyj-server/print')).toBe(false);
     expect(isPassthroughPath('/gift/result/ok')).toBe(false);
   });
 
@@ -297,10 +305,11 @@ describe('shouldPassthrough — сквозной список действует
   });
 
   it('в экспертном режиме сквозной список не действует вовсе', () => {
-    // Критерий приёмки #64: в экспертном режиме поведение всех одиннадцати путей
+    // Критерий приёмки #64: в экспертном режиме поведение всех сквозных путей
     // не меняется — апстримная страница в апстримной оболочке, как сегодня.
     expect(shouldPassthrough('expert', '/profile')).toBe(false);
     expect(shouldPassthrough('expert', '/connection')).toBe(false);
+    expect(shouldPassthrough('expert', '/news/novyj-server')).toBe(false);
   });
 
   it('в простом режиме путь вне списка сквозным не становится', () => {

@@ -13,6 +13,13 @@
     "retry": "Try again",
     "timeLeftUnderMinute": "Less than a minute"
   },
+  "news": {
+    "emptyTitle": "No news yet",
+    "emptyHint": "As soon as there is something, it will show up here.",
+    "errorTitle": "Could not load the news",
+    "errorHint": "Looks like the server is unreachable.",
+    "retry": "Try again"
+  },
   "balance": {
     "promocode": {
       "expiredLabel": "Expired",
