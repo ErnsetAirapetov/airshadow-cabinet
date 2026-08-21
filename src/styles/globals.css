@@ -795,8 +795,36 @@ img.twemoji {
     @apply focus-visible:ring-offset-champagne-100;
   }
 
+  /* ⚠️ ЛОКАЛЬНЫЙ ПАТЧ ФОРКА (#76). Наших правил в этом файле ДВА, и второе —
+     `body { width: 100vw }` выше по файлу (коммит b40f939, там свой комментарий
+     по-русски); при разрешении конфликтов проверять оба, реестр в каноне
+     перечисляет их обоих.
+     При синке апстрим принесёт сюда своё: `bg-champagne-700 text-white
+     shadow-lg shadow-champagne-500/20 …`. Брать его нельзя — оно уводит ГЛАВНОЕ
+     действие с акцентной палитры оператора на нейтральную «шампань»: в тёмной
+     теме «Купить» и «Вход» акцентные (`.btn-primary` выше — `bg-accent-500`), а
+     в светлой были серыми. Реестр патчей — docs/architecture/two-modes.md.
+
+     Почему шейды именно такие, а не «поярче»:
+       - 300 и 400 запрещены — блок `.light` выше ремапит их через `!important`,
+         и написанный цвет в светлой теме означает другой;
+       - светлее шестисотого запрещено — владелец на стенде (#62): «кислотно
+         яркая, в светлой теме вырвиглазно». Приглушается тон, а не вес;
+       - надпись `text-on-accent`, а не литеральный `text-white`: цвет считается
+         от выбранной палитры (`src/hooks/useThemeColors.ts`), и захардкоженный
+         белый ломается на светлом акценте;
+       - тень — глубины, а не цветной ореол: `shadow-xl` и светлый цвет тени
+         светят ВОКРУГ кнопки и возвращают ту же «кислотность».
+
+     ⚠️ Известная граница, принятая осознанно: `--color-on-accent` считается от
+     ПЯТИСОТОГО шейда (`src/hooks/useThemeColors.ts`), а заливка здесь —
+     шестисотая. Разбор границы — в `src/simple/components/accentSurface.ts`; с
+     этим патчем она распространяется и на экспертный режим. Всплывёт жалобой на
+     очень светлом акценте оператора — чинить надо в `useThemeColors`, а не
+     осветлением заливки: это возврат «кислотности» из #62.
+     Сторож правила — `src/simple/lightPrimaryButton.test.ts`. */
   .light .btn-primary {
-    @apply bg-champagne-700 text-white shadow-lg shadow-champagne-500/20 hover:bg-champagne-600 hover:shadow-xl hover:shadow-champagne-500/30 focus-visible:ring-champagne-500 active:bg-champagne-800;
+    @apply bg-accent-600 text-on-accent shadow-md shadow-accent-900/20 hover:bg-accent-700 hover:shadow-lg hover:shadow-accent-900/25 focus-visible:ring-accent-600 active:bg-accent-800;
   }
 
   .light .btn-secondary {

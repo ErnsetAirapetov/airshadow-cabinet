@@ -1,6 +1,12 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
+  LIGHT_REMAPPED_SHADES,
+  MIN_ACCENT_SHADE,
+  lightBlock,
+  lightRemappedShades,
+} from '../accentShades';
+import {
   ACCENT_FOREGROUND,
   ACCENT_FOREGROUND_MUTED,
   ACCENT_SHADOW,
@@ -94,32 +100,21 @@ function parameterList(text: string, name: string): string | null {
 const ALLOWED_TOKENS = new Set(['linear-gradient', 'var', 'rgb', 'rgba', 'none', 'transparent']);
 
 /**
- * Шейды статусных палитр, которые светлая тема ПОДМЕНЯЕТ.
+ * Запрещённые шейды — ОДИН список на весь форк (#76).
  *
- * ⚠️ Подменяет через `!important` (`globals.css`, блок `.light`), а тот бьёт
- * инлайн-переменные, которые ставит `applyThemeColors` на `:root`. То есть в
- * светлой теме перебивается НЕ СТИЛЬ, А САМА ПЕРЕМЕННАЯ, и приём «пишем инлайн,
- * значит светлая тема не помешает» здесь не работает вовсе.
+ * ⚠️ До #76 `LIGHT_REMAPPED_SHADES` и `MIN_ACCENT_SHADE` были объявлены прямо
+ * здесь. В #76 те же два запрета понадобились сторожу правила
+ * `.light .btn-primary` в `globals.css` — и второй список означал бы ровно тот
+ * дефект, против которого стоит весь остальной сторож: копии расходятся молча.
+ * Поэтому правило переехало в `../../accentShades`, а разбор, почему шейды 300 и
+ * 400 подменяются, а акцент светлее шестисотого запрещён, живёт в его докстринге.
  *
- * Список не выдуман: он сверяется с самим `globals.css` тестом ниже. Начнёт
- * апстрим ремапить ещё один шейд — сверка покраснеет, а не промолчит.
+ * Что остаётся ЗДЕСЬ и никуда не переезжает: исключения именно этого модуля —
+ * `--color-on-accent` (не шейд, а считанный контрастный цвет) и
+ * `--color-warning-200` у подписи лимита, которая лежит НА заливке, где светлый
+ * тон и нужен, — и сверка списка с самим `globals.css` (тест ниже). Сверка тоже в
+ * единственном экземпляре: два сторожа читают один список, проверяет его один.
  */
-const LIGHT_REMAPPED_SHADES = new Set(['300', '400']);
-
-/**
- * Самый светлый акцентный шейд, которому в этом модуле есть место (задача #62).
- *
- * ⚠️ Правило от обратного, и оно закрывает КЛАСС, а не случай. Жалоба владельца
- * 18.08.2026 была не «пятисотый неудачен», а «кнопка кислотно яркая, в светлой
- * теме вырвиглазно». Яркость давали именно светлые шейды акцента, поэтому запрет
- * стоит не на конкретном поле заливки, а на любом употреблении шейда ниже
- * шестисотого где угодно в выдаче: вернётся яркость в свечении, в подложке
- * иконки или в дорожке индикатора — покраснеет здесь, а не через месяц по второй
- * жалобе. Исключения ровно два: `--color-on-accent` (это не шейд, а считанный
- * контрастный цвет) и `--color-warning-200` у подписи лимита — она лежит НА
- * заливке, и там светлый тон и нужен.
- */
-const MIN_ACCENT_SHADE = 600;
 
 const PALETTE_VAR = /^--color-(?:accent|warning|success|error)-(\d{2,3})$/;
 const ACCENT_VAR = /^--color-accent-(\d{2,3})$/;
@@ -288,17 +283,12 @@ describe('разбор удался', () => {
     // ремапить ещё один шейд — здесь покраснеет, и запрет ниже расширится
     // вместе с реальностью, а не через полгода по жалобе.
     const css = readFileSync('src/styles/globals.css', 'utf8');
-    const lightBlock = /\n\s*\.light\s*\{([\s\S]*?)\n\s*\}/.exec(css)?.[1] ?? '';
+    const remapped = lightRemappedShades(css);
 
-    const remapped = new Set(
-      [
-        ...lightBlock.matchAll(
-          /--color-(?:accent|warning|success|error)-(\d{2,3})\s*:[^;]*!important/g,
-        ),
-      ].map((found) => found[1]),
-    );
-
-    expect(lightBlock.length).toBeGreaterThan(200);
+    // ⚠️ Длина ИМЕННО блока `.light`, а не всего файла: `globals.css` весит
+    // десятки килобайт и прошёл бы проверку длины даже с вырезанным блоком —
+    // такая проверка непадаема и пару держала бы только на вид.
+    expect(lightBlock(css).length).toBeGreaterThan(200);
     expect(remapped.size).toBeGreaterThan(0);
     expect([...remapped].sort()).toEqual([...LIGHT_REMAPPED_SHADES].sort());
   });
