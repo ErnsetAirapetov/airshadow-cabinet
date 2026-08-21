@@ -1,6 +1,11 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { isSimpleNavActive, SIMPLE_BOTTOM_NAV_ITEMS, SIMPLE_NAV_ITEMS } from './navItems';
+import {
+  isSimpleNavActive,
+  resolveNavLabel,
+  SIMPLE_BOTTOM_NAV_ITEMS,
+  SIMPLE_NAV_ITEMS,
+} from './navItems';
 
 /**
  * Сторожа состава навигации простого режима (#66).
@@ -79,7 +84,7 @@ describe('состав пунктов простого режима', () => {
     ]);
   });
 
-  it('подписи — ключи апстримной локали, а не готовый текст', () => {
+  it('подписи — ключи локали, а не готовый текст', () => {
     // В модуле нет `t`: он чистый, иначе его не прочитать импортом из теста
     // (alias `@/` в vitest нет). Значит подпись — ключ, и переводит потребитель.
     expect(SIMPLE_NAV_ITEMS.map((item) => item.labelKey)).toEqual([
@@ -89,11 +94,25 @@ describe('состав пунктов простого режима', () => {
       'nav.support',
       'nav.profile',
       'nav.info',
-      // ⚠️ Не `nav.news`: такого ключа в апстримных локалях нет, а трогать их
-      // канон запрещает. `news.title` («Новости и обновления») там есть во всех
-      // четырёх языках, и им же подписан заголовок страницы (#74).
+      // ⚠️ Имя то же, что у апстримного `news.title` («Новости и обновления»),
+      // но с #75 это ключ НАШЕГО неймспейса (`ownLabel: true`, см. проверку
+      // ниже) со своим текстом «Новости»: владелец потребовал именно так, а
+      // подходящего апстримного ключа со значением «Новости» нет — есть только
+      // `admin.nav.news` и `profile.notifications.news`, чужая семантика.
       'news.title',
     ]);
+  });
+
+  it('признак `ownLabel` стоит ровно у одного пункта — новостей (задача #75)', () => {
+    // ⚠️ До #75 такого поля не было вовсе: подпись всегда читалась апстримным
+    // `t`. Признак — это и есть механизм, которым потребители различают, каким
+    // переводчиком печатать пункт, не держа своего списка путей и не заводя
+    // ветку «если это новости» (см. проверки потребителей ниже).
+    expect(
+      SIMPLE_NAV_ITEMS.filter((item) => 'ownLabel' in item && item.ownLabel).map(
+        (item) => item.path,
+      ),
+    ).toEqual(['/news']);
   });
 
   it('пути в списке не повторяются', () => {
@@ -301,5 +320,124 @@ describe('isSimpleNavActive — один предикат на три места
       .map(([name]) => name);
 
     expect(own).toEqual([]);
+  });
+});
+
+/**
+ * Механизм подписи (#75): апстримный ключ и наш (`simple`) читаются двумя
+ * разными переводчиками, и решает это признак `ownLabel` у пункта, а не путь и
+ * не потребитель. `resolveNavLabel` — общая функция вместо копии условия в
+ * каждом месте, тот же приём, что у `isSimpleNavActive` выше.
+ */
+describe('resolveNavLabel — один переводчик на признак, без ветки под новости', () => {
+  /**
+   * Потребители, обязанные звать `resolveNavLabel`, — весь список целиком.
+   * `MobileBottomNav.tsx` сюда не входит намеренно: он берёт производное
+   * подмножество, пунктов с `ownLabel` в нём нет, и это отдельно проверяется.
+   */
+  const labelConsumers = [
+    ['SimpleShell.tsx', shellCode],
+    ['SimpleHeader.tsx', headerCode],
+  ] as const;
+
+  const t = (key: string) => `upstream:${key}`;
+  const tSimple = (key: string) => `simple:${key}`;
+
+  it('пункт без `ownLabel` печатается апстримным `t`', () => {
+    expect(resolveNavLabel({ labelKey: 'nav.balance' }, t, tSimple)).toBe('upstream:nav.balance');
+  });
+
+  it('пункт с `ownLabel: false` — тоже апстримным `t`', () => {
+    expect(resolveNavLabel({ labelKey: 'nav.balance', ownLabel: false }, t, tSimple)).toBe(
+      'upstream:nav.balance',
+    );
+  });
+
+  it('пункт с `ownLabel: true` печатается нашим `tSimple`', () => {
+    expect(resolveNavLabel({ labelKey: 'news.title', ownLabel: true }, t, tSimple)).toBe(
+      'simple:news.title',
+    );
+  });
+
+  it('на живом списке новости уходят в `tSimple`, остальные шесть — в `t`', () => {
+    const resolved = SIMPLE_NAV_ITEMS.map((item) => resolveNavLabel(item, t, tSimple));
+
+    expect(resolved).toEqual([
+      'upstream:nav.dashboard',
+      'upstream:nav.subscription',
+      'upstream:nav.balance',
+      'upstream:nav.support',
+      'upstream:nav.profile',
+      'upstream:nav.info',
+      'simple:news.title',
+    ]);
+  });
+
+  it('разбор удался — оба потребителя прочитаны и вызов функции в них найден', () => {
+    // Пара к сторожу ниже: он ищет литерал вызова целиком, и на пустом или
+    // непрочитанном файле остался бы вечно зелёным.
+    for (const [name, code] of labelConsumers) {
+      expect(code.length, name).toBeGreaterThan(100);
+      expect(code, name).toContain('resolveNavLabel(');
+    }
+  });
+
+  it('десктопное меню и бургер передают в общую функцию `t` и `tSimple` — в этом порядке', () => {
+    // ⚠️ Мутации, которые ловит эта проверка:
+    //   1. подмена вызова на копию условия в потребителе —
+    //      `item.path === '/news' ? tSimple(item.labelKey) : t(item.labelKey)`:
+    //      второй источник истины по одному пункту, разъедется с `navItems.ts`
+    //      молча;
+    //   2. ПЕРЕСТАНОВКА переводчиков — `resolveNavLabel(item, tSimple, t)`;
+    //   3. один и тот же переводчик дважды — `resolveNavLabel(item, t, t)`.
+    //
+    // Мутации 2 и 3 `tsc` не поймает в принципе: оба параметра объявлены как
+    // `(key: string) => string`, любая их комбинация типизируется, сборка
+    // зелёная. А на экране пункт «Новости» молча превращается в апстримные
+    // «Новости и обновления» — ровно тот дефект, который чинит #75. Поэтому
+    // сверяется литерал вызова целиком, а не имя функции: проверка на
+    // `includes('resolveNavLabel(')` подмену переводчиков не видит.
+    //
+    // Нижнее меню сюда не входит: `MobileBottomNav.tsx` печатает подпись сам
+    // апстримным `t` — про него отдельная проверка ниже.
+    //
+    // Хвостовая запятая допущена намеренно: разбитый переносами вызов biome
+    // обратно в строку не схлопывает из-за magic trailing comma, и без `,?`
+    // сторож краснел бы на чистом переформатировании — чинить пришлось бы его,
+    // а не код. Чего регулярка по-прежнему не переживёт: переименования `item`
+    // или `tSimple` и четвёртого аргумента. Это не дефект: отличить такую
+    // правку от ПОТЕРИ вызова помогает парный «разбор удался» выше — он
+    // остаётся зелёным, пока `resolveNavLabel(` в обоих потребителях на месте.
+    const CALL = /resolveNavLabel\(\s*item\s*,\s*t\s*,\s*tSimple\s*,?\s*\)/;
+
+    const wrong = labelConsumers.filter(([, code]) => !CALL.test(code)).map(([name]) => name);
+
+    expect(wrong).toEqual([]);
+  });
+
+  it('в нижнем меню нет пунктов с `ownLabel` — оно печатает подпись мимо функции', () => {
+    // `MobileBottomNav.tsx` про `ownLabel` не знает: подпись там берётся
+    // апстримным `t` напрямую. Пункт с нашим ключом внизу дал бы апстримный
+    // текст молча, при зелёной сборке — тот же дефект, что чинит #75, только
+    // на другом экране. Пока таких пунктов внизу нет, это безопасно; прежде чем
+    // снимать проверку — научи нижнее меню звать `resolveNavLabel`.
+    expect(SIMPLE_BOTTOM_NAV_ITEMS.filter((item) => 'ownLabel' in item && item.ownLabel)).toEqual(
+      [],
+    );
+  });
+
+  it('ни один потребитель не решает по пути или по имени ключа новостей', () => {
+    // Литерал `/news` или `news.title` в условии потребителя — это и есть
+    // запрещённая канон-ом «ветка если это новости»: она разъедется с составом
+    // `navItems.ts` молча при следующем ключе с `ownLabel`.
+    const branching = consumers
+      .filter(
+        ([, code]) =>
+          /path\s*===?\s*['"]\/news['"]/.test(code) ||
+          /labelKey\s*===?\s*['"]news\.title['"]/.test(code),
+      )
+      .map(([name]) => name);
+
+    expect(branching).toEqual([]);
   });
 });
