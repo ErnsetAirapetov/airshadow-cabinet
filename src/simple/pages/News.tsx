@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 
 import { SimpleNewsSection } from '../components/news/NewsSection';
 import { PAGE_HEADING_BLOCK } from '../components/pageHeading';
+import { SIMPLE_NS } from '../i18n';
 
 /**
  * Новости простого режима — отдельная страница `/news` (задача #74).
@@ -16,15 +17,22 @@ import { PAGE_HEADING_BLOCK } from '../components/pageHeading';
  * поднимать его сюда значило бы либо продублировать его, либо перекроить копию
  * апстрима — то и другое хуже.
  *
- * Заголовок печатается апстримным ключом `news.title` — тем же, которым подписан
- * пункт меню (`navItems.ts`). Своей строки не заводим: разъехавшись, заголовок и
- * пункт меню назывались бы по-разному при зелёной сборке.
+ * ⚠️ Заголовок печатается НАШИМ ключом `news.title` из неймспейса `simple`
+ * (задача #75), а не апстримным. Владелец потребовал просто «Новости», а
+ * апстримный `news.title` держит «Новости и обновления» — трогать апстримные
+ * локали канон запрещает, а подходящего апстримного ключа со значением
+ * «Новости» нет: `admin.nav.news` и `profile.notifications.news` — чужая
+ * семантика (админский раздел и настройки уведомлений). Имя ключа то же самое,
+ * что у апстримного, — это норма для двух неймспейсов, а не дубль (см.
+ * docs/architecture/two-modes.md, «Локали»), но текст свой. Печатается тем же
+ * ключом, что и подпись пункта меню (`navItems.ts`, поле `ownLabel`), так что
+ * заголовок и пункт меню разъехаться не могут.
  *
- * Второй раз на экране этот ключ не печатается: заголовочный чип внутри копии
- * ленты снят — см. разметку расхождения в `components/news/NewsSection.tsx`.
+ * Апстримный `news.title` не осиротел: его по-прежнему печатает
+ * `aria-label` списка вкладок в копии ленты (`components/news/NewsSection.tsx`).
  */
 export function SimpleNews() {
-  const { t } = useTranslation();
+  const { t: tSimple } = useTranslation(SIMPLE_NS);
 
   return (
     // ⚠️ Ритм — общий для страниц простого режима (#73): та же обёртка стоит на
@@ -35,7 +43,7 @@ export function SimpleNews() {
           паритета знает только про главную и `/balance` и третью страницу не
           проверит, поэтому здесь это единственная защита от расхождения. */}
       <div className={PAGE_HEADING_BLOCK}>
-        <h1 className="text-2xl font-bold text-dark-50 sm:text-3xl">{t('news.title')}</h1>
+        <h1 className="text-2xl font-bold text-dark-50 sm:text-3xl">{tSimple('news.title')}</h1>
       </div>
 
       <SimpleNewsSection />

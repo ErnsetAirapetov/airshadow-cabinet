@@ -14,6 +14,7 @@
     "timeLeftUnderMinute": "Less than a minute"
   },
   "news": {
+    "title": "News",
     "emptyTitle": "No news yet",
     "emptyHint": "As soon as there is something, it will show up here.",
     "errorTitle": "Could not load the news",

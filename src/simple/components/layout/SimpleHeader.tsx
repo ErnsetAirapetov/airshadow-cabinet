@@ -34,7 +34,7 @@ import { displayName } from '@/utils/displayName';
 import { SIMPLE_NS } from '../../i18n';
 import { useModeStore } from '@/store/mode';
 import { SIMPLE_NAV_ICONS } from './navIcons';
-import { isSimpleNavActive, SIMPLE_NAV_ITEMS } from './navItems';
+import { isSimpleNavActive, resolveNavLabel, SIMPLE_NAV_ITEMS } from './navItems';
 
 const FALLBACK_NAME = import.meta.env.VITE_APP_NAME || 'Cabinet';
 const FALLBACK_LOGO = import.meta.env.VITE_APP_LOGO || 'V';
@@ -345,7 +345,7 @@ export function SimpleHeader({
                       className={active ? 'nav-item-active' : 'nav-item'}
                     >
                       <Icon className="h-5 w-5" />
-                      {t(item.labelKey)}
+                      {resolveNavLabel(item, t, tSimple)}
                     </Link>
                   );
                 })}

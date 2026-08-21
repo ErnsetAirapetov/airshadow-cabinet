@@ -28,7 +28,7 @@ import { SIMPLE_NS } from '../../i18n';
 import { MobileBottomNav } from './MobileBottomNav';
 import { SimpleHeader } from './SimpleHeader';
 import { SIMPLE_NAV_ICONS } from './navIcons';
-import { isSimpleNavActive, SIMPLE_NAV_ITEMS } from './navItems';
+import { isSimpleNavActive, resolveNavLabel, SIMPLE_NAV_ITEMS } from './navItems';
 
 /**
  * Оболочка простого режима — копия апстримного
@@ -229,7 +229,11 @@ export function SimpleShell({ children }: { children: React.ReactNode }) {
               копии состава разъехались молча, при зелёной сборке. */}
           <nav className="flex items-center gap-0.5 justify-self-center rounded-full border border-dark-800/70 bg-dark-900/50 p-1 shadow-sm backdrop-blur-sm">
             {SIMPLE_NAV_ITEMS.map((item) =>
-              renderNavLink(item.path, t(item.labelKey), SIMPLE_NAV_ICONS[item.path]),
+              renderNavLink(
+                item.path,
+                resolveNavLabel(item, t, tSimple),
+                SIMPLE_NAV_ICONS[item.path],
+              ),
             )}
             {isAdmin && (
               <>

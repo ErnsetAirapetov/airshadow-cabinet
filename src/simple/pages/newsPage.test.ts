@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest';
 
 import { PAGE_HEADING_BLOCK } from '../components/pageHeading';
 import { SIMPLE_NAV_ITEMS } from '../components/layout/navItems';
+import enSimple from '../locales/en.json';
+import ruSimple from '../locales/ru.json';
 
 /**
  * Сторожа страницы новостей `/news` (задача #74).
@@ -44,11 +46,16 @@ function countOf(source: string, needle: string): number {
 const pageSource = read(PAGE);
 const page = stripComments(pageSource);
 
-/** Ключ, которым подписан заголовок `h1` страницы. */
-const headingKey = /<h1[^>]*>\{t\('([^']+)'\)\}<\/h1>/.exec(page)?.[1] ?? '';
+/**
+ * Ключ, которым подписан заголовок `h1` страницы — печатается `tSimple`, а не
+ * апстримным `t` (задача #75).
+ */
+const headingKey = /<h1[^>]*>\{tSimple\('([^']+)'\)\}<\/h1>/.exec(page)?.[1] ?? '';
 
-/** Подпись пункта меню «Новости» — из общего списка навигации. */
-const navLabelKey = SIMPLE_NAV_ITEMS.find((item) => item.path === '/news')?.labelKey ?? '';
+/** Пункт меню «Новости» — из общего списка навигации. */
+const newsNavItem = SIMPLE_NAV_ITEMS.find((item) => item.path === '/news');
+/** Подпись пункта меню «Новости». */
+const navLabelKey = newsNavItem?.labelKey ?? '';
 
 describe('разбор страницы новостей удался (задача #74)', () => {
   it('файл на месте и опознан', () => {
@@ -95,35 +102,74 @@ describe('вертикаль страницы совпадает с соседя
   });
 });
 
-describe('страница и пункт меню называются одинаково (задача #74)', () => {
+describe('страница и пункт меню называются одинаково (задача #75)', () => {
   it('заголовок печатается тем же ключом, что подпись пункта меню', () => {
-    // ⚠️ Ключ АПСТРИМНЫЙ и общий на два места: `nav.news` в апстримных локалях
-    // нет, а трогать их канон запрещает. Разъедься эти два места — пункт меню и
-    // заголовок страницы назывались бы по-разному, и заметил бы это человек, а
-    // не проверка.
+    // ⚠️ Ключ — НАШ, из неймспейса `simple`: владелец потребовал просто
+    // «Новости», а апстримный `news.title` держит «Новости и обновления» и
+    // трогать апстримные локали канон запрещает. Подходящего апстримного ключа
+    // со значением «Новости» тоже нет — `admin.nav.news` и
+    // `profile.notifications.news` чужой семантики. Разъедься эти два места —
+    // пункт меню и заголовок страницы назывались бы по-разному, и заметил бы
+    // это человек, а не проверка.
     expect(headingKey).toBe(navLabelKey);
     expect(headingKey).toBe('news.title');
   });
 
-  it('этот ключ есть во ВСЕХ апстримных локалях', () => {
-    // ⚠️ Без этой проверки пара выше сторожила бы только совпадение двух мест,
-    // и оба могли бы совпасть на несуществующем ключе: i18next печатает такой
-    // ключ как есть, молча, при зелёных сборке и типах. Апстрим уберёт
-    // `news.title` — покраснеет здесь, а не на стенде. Четыре языка, потому что
-    // переключатель языка в простом режиме показывает все четыре.
-    const missing = ['ru', 'en', 'fa', 'zh'].filter((lng) => {
-      const tree = JSON.parse(read(`src/locales/${lng}.json`) || '{}');
-      return typeof tree?.news?.title !== 'string';
-    });
-
-    expect(missing, 'апстримные локали не знают `news.title`').toEqual([]);
+  it('пункт меню помечен как НАШ ключ (`ownLabel`), а не апстримный', () => {
+    // Без этого признака потребители печатали бы `labelKey` апстримным `t` и
+    // нашли бы в апстримной локали другой текст — «Новости и обновления».
+    expect(newsNavItem?.ownLabel).toBe(true);
   });
 
-  it('заголовок печатается апстримным `t`, а не нашим неймспейсом', () => {
-    // `news.title` живёт в апстримных локалях всех четырёх языков; `tSimple` его
-    // не найдёт и напечатает сырой ключ.
-    expect(page).not.toContain('tSimple');
-    expect(page).not.toContain('SIMPLE_NS');
+  it('этот ключ есть в НАШИХ локалях простого режима — на обоих языках', () => {
+    // ⚠️ Без этой проверки пара выше сторожила бы только совпадение двух мест,
+    // и оба могли бы совпасть на несуществующем ключе: i18next печатает такой
+    // ключ как есть, молча, при зелёной сборке и типах. Языков два — решение
+    // владельца про состав простого неймспейса, не про переключатель языка.
+    const missing = (
+      [
+        ['ru', ruSimple],
+        ['en', enSimple],
+      ] as const
+    ).filter(
+      ([, tree]) => typeof (tree as { news?: { title?: unknown } }).news?.title !== 'string',
+    );
+
+    expect(
+      missing.map(([lng]) => lng),
+      'наши локали не знают `news.title`',
+    ).toEqual([]);
+  });
+
+  it('заголовок печатается НАШИМ неймспейсом, а не апстримным `t`', () => {
+    // `news.title` в неймспейсе `simple` — другой текст, чем у апстримного;
+    // непривязанный `t` найдёт апстримную строку («Новости и обновления»), а не
+    // ошибку и не пустоту — расхождение молчаливое.
+    expect(page).toContain('tSimple');
+    expect(page).toContain('SIMPLE_NS');
+    expect(page).not.toMatch(/\{t\('news\.title'\)\}/);
+  });
+
+  it('апстримный `news.title` не осиротел — его печатает `aria-label` вкладок ленты', () => {
+    // ⚠️ Задача #75 требует проверить это, а не поверить на слово: ключ
+    // по-прежнему нужен апстримным локалям, поэтому убирать его оттуда нельзя,
+    // даже если бы канон это разрешал.
+    const feed = stripComments(read(FEED));
+    expect(feed).toContain("aria-label={t('news.title')}");
+  });
+
+  it('наш текст отличается от апстримного — иначе переезд ключа был бы бессмысленным', () => {
+    const upstreamRu = JSON.parse(read('src/locales/ru.json') || '{}') as {
+      news?: { title?: string };
+    };
+
+    expect(typeof upstreamRu.news?.title, 'апстримный `news.title` пропал').toBe('string');
+    expect(ruSimple.news.title).not.toBe(upstreamRu.news?.title);
+    expect(ruSimple.news.title).toBe('Новости');
+    // Английский закреплён наравне с русским: наши строки живут на двух языках
+    // (канон, «Локали»), и «News and updates» вместо «News» — тот же дефект
+    // #75, только на второй локали, где владелец его не увидит на стенде.
+    expect(enSimple.news.title).toBe('News');
   });
 });
 
