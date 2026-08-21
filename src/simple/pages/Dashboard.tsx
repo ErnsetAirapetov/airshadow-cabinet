@@ -259,8 +259,9 @@ export function SimpleDashboard() {
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {/* ⚠️ `linked` — не украшение: карточка ведёт на `/balance`, и до #73
             единственный кликабельный элемент главной был без всякого признака
-            ссылки. Проп зажигает шеврон и hover; на самом `/balance` его нет,
-            потому что оттуда карточка никуда не ведёт. */}
+            ссылки. Проп зажигает шеврон — и только его: реакции на наведение у
+            карточки нет вовсе, это решение владельца (#79). На самом `/balance`
+            пропа нет, потому что оттуда карточка никуда не ведёт. */}
         <Link to="/balance" className="block h-full" data-onboarding="balance">
           <BalanceWidget tone="accent" linked />
         </Link>
