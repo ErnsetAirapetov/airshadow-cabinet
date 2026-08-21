@@ -13,6 +13,7 @@ import type { PaginatedResponse, Transaction } from '@/types';
 import { uiLocale } from '@/utils/uiLocale';
 import { BalanceWidget, useBalanceQuery } from '../components/BalanceWidget';
 import { PaymentMethodsGrid } from '../components/PaymentMethodsGrid';
+import { PAGE_HEADING_BLOCK } from '../components/pageHeading';
 import { SIMPLE_NS } from '../i18n';
 import {
   resolvePaymentReturnRedirect,
@@ -168,10 +169,23 @@ export function SimpleBalance() {
   };
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-dark-50 sm:text-3xl">{t('balance.title')}</h1>
+    // ⚠️ Ритм — тот же, что у главной (#73). Он второе слагаемое вертикальной
+    // позиции карточки баланса: разъедься ритм, и карточка снова прыгнет при
+    // переходе, даже если высота блока заголовка совпадает.
+    <div className="space-y-4 sm:space-y-6">
+      {/* ⚠️ Высота блока — общая константа с главной (#73). Заголовок здесь
+          однострочный, а над карточкой баланса на главной стоит двухстрочное
+          приветствие: без общей высоты карточка при переходе смещалась бы. Текст
+          при этом остаётся однострочным — растёт блок, а не заголовок. */}
+      <div className={PAGE_HEADING_BLOCK}>
+        <h1 className="text-2xl font-bold text-dark-50 sm:text-3xl">{t('balance.title')}</h1>
+      </div>
 
-      {/* Баланс — общий виджет: тот же блок стоит на экране суммы пополнения. */}
+      {/* Баланс — общий виджет: тот же блок стоит на экране суммы пополнения.
+          Тон остаётся плоским: акцент на этой странице принадлежит кнопке
+          пополнения, второй громкий элемент отобрал бы у неё внимание (решение
+          владельца). Совпадать с главной обязаны размер, шрифты, компоновка и
+          позиция — но не цвет. */}
       <BalanceWidget />
 
       {/* Способы пополнения — сразу под балансом: главное действие экрана.
