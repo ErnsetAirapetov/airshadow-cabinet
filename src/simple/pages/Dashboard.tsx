@@ -12,6 +12,7 @@ import { useAuthStore } from '@/store/auth';
 import { displayName } from '@/utils/displayName';
 import { BalanceWidget, useBalanceQuery } from '../components/BalanceWidget';
 import PromoOffersSection from '../components/PromoOffersSection';
+import { PAGE_HEADING_BLOCK } from '../components/pageHeading';
 import { StatCard } from '../components/StatCard';
 import PendingGiftCard from '../components/dashboard/PendingGiftCard';
 import SubscriptionCardActive from '../components/dashboard/SubscriptionCardActive';
@@ -219,8 +220,13 @@ export function SimpleDashboard() {
     <div className="space-y-4 sm:space-y-6">
       {/* Приветствие и имя — разными строками. Одной строкой «Добро пожаловать,
           Станислав Манченко» рвётся по ширине экрана в произвольном месте; так
-          имя всегда целиком на своей строке и читается как акцент. */}
-      <div>
+          имя всегда целиком на своей строке и читается как акцент.
+
+          ⚠️ Высота блока — общая константа (#73), и стоит она на обёртке, а не
+          в ветках. Приветствие бывает и однострочным (`welcomeNoName`), а под
+          блоком карточка баланса: без общей высоты она уезжала бы и между двумя
+          состояниями самой главной, и при переходе на `/balance`. */}
+      <div className={PAGE_HEADING_BLOCK}>
         {userName ? (
           <h1 className="text-2xl font-bold text-dark-50 sm:text-3xl">
             <span className="block text-base font-medium text-dark-300 sm:text-lg">
@@ -251,8 +257,12 @@ export function SimpleDashboard() {
           ними строку не должен), `sm:` и шире — прежние две колонки. `h-full` на
           ссылках и в акцентном тоне виджета держит карточки одной высоты. */}
       <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        {/* ⚠️ `linked` — не украшение: карточка ведёт на `/balance`, и до #73
+            единственный кликабельный элемент главной был без всякого признака
+            ссылки. Проп зажигает шеврон и hover; на самом `/balance` его нет,
+            потому что оттуда карточка никуда не ведёт. */}
         <Link to="/balance" className="block h-full" data-onboarding="balance">
-          <BalanceWidget tone="accent" />
+          <BalanceWidget tone="accent" linked />
         </Link>
         <Link to="/referral" className="block h-full">
           <StatCard

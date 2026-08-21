@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 
 import { balanceApi } from '@/api/balance';
+import { ChevronRightIcon } from '@/components/icons';
 import { API } from '@/config/constants';
 import { useCurrency } from '@/hooks/useCurrency';
 import {
@@ -41,8 +42,16 @@ export function useBalanceQuery() {
  * разъехалась бы с первой при первой же правке.
  *
  * ⚠️ На главной виджет ПЕРЕИСПОЛЬЗУЕТСЯ, а не копируется (#72): баланс там —
- * главный акцент экрана, но это тот же баланс и тот же запрос. Отличие ровно
- * одно и оно пропом — тон поверхности; см. `tone` ниже.
+ * главный акцент экрана, но это тот же баланс и тот же запрос. Отличий ровно два,
+ * и оба пропами: тон поверхности (`tone`) и признак кликабельности (`linked`).
+ * Разметка при этом ОДНА на все сочетания — ветвление разметки по тону и есть тот
+ * приём, из-за которого копии расходятся молча.
+ *
+ * ⚠️ Что у трёх экранов обязано СОВПАДАТЬ (#73): кегль суммы, компоновка и
+ * вертикальная позиция карточки. Владелец ходит между главной и `/balance` как по
+ * одному экрану, и любое расхождение читается как дёрганье интерфейса. За кегль
+ * отвечает `balanceValueScale`, за позицию — `pageHeading` вместе с ритмом
+ * страниц. Не совпадает только цвет, и это решение владельца.
  *
  * ⚠️ Своей ширины виджет не задаёт: он обычный блок и занимает всю ширину той
  * колонки, в которую его поставили. Требование владельца «растянут на ширину
@@ -78,9 +87,26 @@ export interface BalanceWidgetProps {
    * заводить нельзя — см. докстринг того модуля.
    */
   tone?: 'flat' | 'accent';
+  /**
+   * Карточка кликабельна — она ссылка, и об этом надо сказать (задача #73).
+   *
+   * ⚠️ Проп НЕОБЯЗАТЕЛЬНЫЙ и по умолчанию выключен, и это не осторожность, а
+   * правда о трёх экранах: на главной карточка ведёт на `/balance`, а на самом
+   * `/balance` и на экране суммы пополнения она не ведёт никуда — звать оттуда
+   * некуда. Шеврон и реакция на курсор на некликабельной карточке — обещание,
+   * которое некому исполнить.
+   *
+   * ⚠️ Проп ортогонален `tone`: разметка одна на все сочетания. Ветвление
+   * разметки по тону — ровно тот приём, из-за которого копии расходятся.
+   */
+  linked?: boolean;
 }
 
-export function BalanceWidget({ balanceRubles, tone = 'flat' }: BalanceWidgetProps = {}) {
+export function BalanceWidget({
+  balanceRubles,
+  tone = 'flat',
+  linked = false,
+}: BalanceWidgetProps = {}) {
   const { t } = useTranslation();
   const { formatAmount, currencySymbol } = useCurrency();
   const { data: balanceData } = useBalanceQuery();
@@ -108,31 +134,65 @@ export function BalanceWidget({ balanceRubles, tone = 'flat' }: BalanceWidgetPro
     borderColor: 'transparent',
   };
 
+  // ⚠️ Кегль считает правило, и считает его ОДИНАКОВО для обоих тонов (#73).
+  // Раньше плоский тон шёл литеральной парой `text-4xl sm:text-5xl`, и сумма
+  // меняла размер при переходе главная → `/balance` — интерфейс дёргался на
+  // ровном месте.
+  //
+  // ⚠️ Бюджеты в правиле посчитаны по САМОЙ УЗКОЙ колонке макета — по сетке
+  // `sm:grid-cols-2` главной, — а на `/balance` карточка всегда во всю ширину
+  // страницы. То есть здесь кегль сознательно консервативнее необходимого. Так и
+  // надо: цель — чтобы сумма не меняла размер при переходе, а не чтобы на каждом
+  // экране была максимально крупной. Попытка «оптимизировать по месту» вернёт
+  // ровно тот дефект, ради которого правило сюда и переехало.
+  const valueClass = `${resolveBalanceValueClass(formatted)} whitespace-nowrap font-bold`;
+
+  // ⚠️ Хром берётся по КЛИКАБЕЛЬНОСТИ, а не по тону: `bento-card-hover` — общий
+  // класс простого режима (`src/styles/globals.css`), тот же, что у карточек
+  // способов пополнения и у плиток каталога тарифов. Своего эффекта виджет не
+  // выдумывает.
+  //
+  // ⚠️ На акцентной заливке от него остаются подъём и белёсая подсветка сверху:
+  // цвет фона, рамку и тень правило поменять не может — их задаёт инлайн-стиль,
+  // а он сильнее любого правила таблицы. Так и надо, заливка обязана оставаться
+  // ровно той же, что у кнопки подключения.
+  const surfaceClass = linked ? 'bento-card-hover' : 'bento-card';
+
   return (
     // ⚠️ `h-full` только у акцентного тона: на главной виджет стоит в сетке рядом
     // с плиткой рефералов, и без него карточки в строке разной высоты. На двух
     // других экранах виджет стоит в потоке, и класса там нет вовсе.
     <div
-      className={isAccent ? 'bento-card h-full' : 'bento-card'}
+      className={isAccent ? `${surfaceClass} h-full` : surfaceClass}
       style={isAccent ? accentStyle : undefined}
     >
       <div
-        className={isAccent ? 'mb-2 text-sm' : 'mb-2 text-sm text-dark-400'}
-        style={isAccent ? { color: ACCENT_FOREGROUND_MUTED } : undefined}
-      >
-        {t('balance.currentBalance')}
-      </div>
-      {/* ⚠️ В акцентном тоне кегль считает `resolveBalanceValueClass`, а не
-          литерал: `text-5xl` на семизначной сумме не влезает в колонку
-          360-пиксельного экрана, а `.bento-card` идёт с `overflow: hidden` —
-          лишнее не выпирает, а обрезается. Правило и его цена — в докстринге
-          модуля. Плоский тон остаётся с прежней парой `text-4xl sm:text-5xl`. */}
-      <div
         className={
           isAccent
-            ? `${resolveBalanceValueClass(formatted)} whitespace-nowrap font-bold`
-            : 'text-4xl font-bold text-dark-50 sm:text-5xl'
+            ? 'mb-2 flex items-center justify-between gap-2 text-sm'
+            : 'mb-2 flex items-center justify-between gap-2 text-sm text-dark-400'
         }
+        style={isAccent ? { color: ACCENT_FOREGROUND_MUTED } : undefined}
+      >
+        <span>{t('balance.currentBalance')}</span>
+        {/* ⚠️ Шеврон — тот же значок и того же размера, что у плитки рефералов
+            на главной: обе карточки там ссылки, и звать они обязаны одинаково.
+            Цвет берётся от ТОНА поверхности: `text-dark-500` плитки на сплошной
+            акцентной заливке не виден вовсе.
+
+            На акценте цвет НЕ ЗАДАН — и это механизм, а не забывчивость. Иконки
+            открытого каталога рисуются `currentColor` и стиля не принимают
+            (`IconProps` — это один `className`), поэтому шеврон наследует цвет
+            строки подписи, а он у акцента уже `ACCENT_FOREGROUND_MUTED`. Копия
+            того же значения на самом шевроне была бы вторым местом правки. */}
+        {linked && (
+          <ChevronRightIcon
+            className={isAccent ? 'h-4 w-4 shrink-0' : 'h-4 w-4 shrink-0 text-dark-500'}
+          />
+        )}
+      </div>
+      <div
+        className={isAccent ? valueClass : `${valueClass} text-dark-50`}
         style={isAccent ? { color: ACCENT_FOREGROUND } : undefined}
       >
         {formatted}
