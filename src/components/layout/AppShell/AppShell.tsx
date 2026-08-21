@@ -1,10 +1,18 @@
 import { useEffect, useState } from 'react';
-import { useLocation, Link } from 'react-router';
+import { useLocation, useNavigate, Link } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
+// Иконка возврата в простой режим (#41). Импортируется прямо здесь, без обёртки
+// в `@/components/icons` — тот каталог апстримный, лишний файл в нём означал бы
+// лишний конфликт на каждом синке ради одной картинки.
+import { PiArrowsInSimple } from 'react-icons/pi';
 
 import { useAuthStore } from '@/store/auth';
+import { useModeStore } from '@/store/mode';
+// Реестр простых страниц — один на приложение (#45), импорт разрешён поимённо в
+// scripts/check-mode-boundaries.mjs.
+import { hasSimpleView } from '@/simple';
 import { useHaptic } from '@/platform';
 import { useTelegramSDK } from '@/hooks/useTelegramSDK';
 import { useHeaderHeight } from '@/hooks/useHeaderHeight';
@@ -27,7 +35,7 @@ import {
   GiftIcon,
   HomeIcon,
   CreditCardIcon,
-  SupportIcon,
+  ChatIcon,
   UserIcon,
   UsersIcon,
   ShieldIcon,
@@ -55,6 +63,9 @@ export function AppShell({ children }: AppShellProps) {
   const { mobile: headerHeight } = useHeaderHeight();
   const haptic = useHaptic();
   const { toggleTheme, isDark } = useTheme();
+  // Переключатель режима виден всегда (#45, канон two-modes.md).
+  const setMode = useModeStore((state) => state.setMode);
+  const navigate = useNavigate();
 
   // Extracted hooks
   const { appName, logoLetter, hasCustomLogo, logoUrl } = useBranding();
@@ -120,7 +131,7 @@ export function AppShell({ children }: AppShellProps) {
     { path: '/balance', label: t('nav.balance'), icon: CreditCardIcon },
     ...(referralEnabled ? [{ path: '/referral', label: t('nav.referral'), icon: UsersIcon }] : []),
     ...(giftEnabled ? [{ path: '/gift', label: t('nav.gift'), icon: GiftIcon }] : []),
-    { path: '/support', label: t('nav.support'), icon: SupportIcon },
+    { path: '/support', label: t('nav.support'), icon: ChatIcon },
     { path: '/info', label: t('nav.info'), icon: InfoIcon },
     { path: '/profile', label: t('nav.profile'), icon: UserIcon },
   ];
@@ -244,6 +255,29 @@ export function AppShell({ children }: AppShellProps) {
 
           {/* Right side actions — правая колонка grid, прижата к краю, не сжимается */}
           <div className="flex shrink-0 items-center gap-2 justify-self-end">
+            {/* Переключатель в простой режим виден в обоих режимах (#45): нет
+                простой версии пути — уводим на главную, иначе кнопка мёртвая.
+                «Простая версия» с #64 — это своя простая страница ИЛИ апстримная
+                страница в простой оболочке (сквозной список), и ответ на оба
+                вопроса сразу даёт hasSimpleView.
+                Неймспейс подписи литералом (#46) — сознательно, а не по запрету
+                гейта: файл в SEAMS, и импорт SIMPLE_NS гейт бы пропустил; литерал
+                держит шапку независимой от внутренностей простого режима
+                (docs/architecture/two-modes.md). */}
+            <button
+              onClick={() => {
+                haptic.impact('light');
+                setMode('simple');
+                if (!hasSimpleView(location.pathname)) {
+                  navigate('/');
+                }
+              }}
+              className="rounded-xl border border-dark-700/50 bg-dark-800/50 p-2 text-dark-400 transition-colors duration-200 hover:bg-dark-700 hover:text-accent-400"
+              aria-label={t('mode.toSimple', { ns: 'simple' })}
+              title={t('mode.toSimple', { ns: 'simple' })}
+            >
+              <PiArrowsInSimple className="h-5 w-5" />
+            </button>
             <button
               onClick={() => {
                 haptic.impact('light');

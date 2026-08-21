@@ -7,8 +7,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "build:docker": "vite build",
+    "build": "node scripts/check-mode-boundaries.mjs && tsc && vite build",
+    "check:modes": "node scripts/check-mode-boundaries.mjs",
+    "build:docker": "node scripts/check-mode-boundaries.mjs && vite build",
     "lint": "biome lint .",
     "lint:fix": "biome lint --write .",
     "format": "biome format --write .",

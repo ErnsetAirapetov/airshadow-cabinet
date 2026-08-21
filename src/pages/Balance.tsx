@@ -69,7 +69,6 @@ export default function Balance() {
     id: number;
     tariff_name: string;
     days_left: number;
-    status?: string;
   }> | null>(null);
   const [promoSelectCode, setPromoSelectCode] = useState<string | null>(null);
   const [transactionsPage, setTransactionsPage] = useState(1);
@@ -292,13 +291,7 @@ export default function Balance() {
                 >
                   <span className="truncate">{sub.tariff_name}</span>
                   <span className="shrink-0 text-dark-400">
-                    {sub.status === 'expired'
-                      ? t('balance.promocode.expiredLabel', 'Истекла')
-                      : sub.status === 'disabled'
-                        ? t('balance.promocode.disabledLabel', 'Отключена')
-                        : t('balance.promocode.daysLeft', '{{count}} дн.', {
-                            count: sub.days_left,
-                          })}
+                    {t('balance.promocode.daysLeft', '{{count}} дн.', { count: sub.days_left })}
                   </span>
                 </button>
               ))}

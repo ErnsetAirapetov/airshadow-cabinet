@@ -12,7 +12,7 @@ import { SwitchTariffSheet } from '../components/subscription/sheets/SwitchTarif
 import { TariffPurchaseForm } from '../components/subscription/purchase/TariffPurchaseForm';
 import { TariffPickerGrid } from '../components/subscription/purchase/TariffPickerGrid';
 import { ClassicPurchaseWizard } from '../components/subscription/purchase/ClassicPurchaseWizard';
-import { ExclamationIcon } from '@/components/icons';
+import { ExclamationIcon, SparklesIcon } from '@/components/icons';
 
 export default function SubscriptionPurchase() {
   const { t } = useTranslation();
@@ -159,9 +159,46 @@ export default function SubscriptionPurchase() {
             padding: '24px 28px',
           }}
         >
-          {/* Блок «Выберите тариф для продолжения» убран: он занимал верх экрана,
-              повторяя то, что и так очевидно из списка тарифов ниже. Предупреждения
-              об истёкшей и legacy-подписке остаются — они несут информацию. */}
+          {/* Trial upgrade prompt — hidden when expired banner is active */}
+          {subscription?.is_trial &&
+            !(
+              isTariffsMode &&
+              purchaseOptions &&
+              'subscription_is_expired' in purchaseOptions &&
+              purchaseOptions.subscription_is_expired
+            ) && (
+              <div
+                className="mb-6 rounded-[14px] p-4"
+                style={{
+                  background:
+                    'linear-gradient(135deg, rgba(255,184,0,0.08), rgba(var(--color-accent-400),0.06))',
+                  border: '1px solid rgba(255,184,0,0.15)',
+                }}
+              >
+                <div className="flex items-start gap-3">
+                  <div
+                    className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-[10px]"
+                    style={{
+                      background: 'rgba(255,184,0,0.12)',
+                      color: 'rgb(var(--color-urgent-400))',
+                    }}
+                  >
+                    <SparklesIcon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <div
+                      className="text-sm font-semibold"
+                      style={{ color: 'rgb(var(--color-urgent-400))' }}
+                    >
+                      {t('subscription.trialUpgrade.title')}
+                    </div>
+                    <div className="mt-1 text-[12px] text-dark-50/40">
+                      {t('subscription.trialUpgrade.description')}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
           {/* Expired subscription notice */}
           {isTariffsMode &&

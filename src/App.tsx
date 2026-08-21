@@ -22,6 +22,10 @@ function lazyWithRetry<T extends ComponentType<unknown>>(factory: () => Promise<
 }
 import { useBlockingStore } from './store/blocking';
 import Layout from './components/layout/Layout';
+// Простой режим. Один из трёх апстримных файлов, которым разрешено импортировать
+// из src/simple/ — полный список см. SEAMS в scripts/check-mode-boundaries.mjs и
+// раздел «Поимённый список: SEAMS» в docs/architecture/two-modes.md.
+import { SimpleShell, useSimpleOverride, useSimplePassthrough } from './simple';
 import PageLoader from './components/common/PageLoader';
 import {
   MaintenanceScreen,
@@ -173,6 +177,13 @@ function ProtectedRoute({
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isLoading = useAuthStore((state) => state.isLoading);
   const location = useLocation();
+  // Шов двух режимов — единственное место подмены страниц во всём приложении.
+  // Хук вызывается ДО ранних возвратов (иначе нарушится порядок хуков), а решение
+  // принимается ДО рендера: апстримная страница не должна отрисоваться, чтобы
+  // через кадр быть заменённой простой. Канон — docs/architecture/two-modes.md.
+  const SimplePage = useSimpleOverride(location.pathname);
+  // Третья ветка шва (#64): страница остаётся апстримной, но оболочка — простая.
+  const isPassthrough = useSimplePassthrough(location.pathname);
 
   if (isLoading) {
     return <PageLoader variant="dark" />;
@@ -181,6 +192,30 @@ function ProtectedRoute({
   if (!isAuthenticated) {
     saveReturnUrl();
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  }
+
+  // Гарды авторизации выше отработали одинаково для обоих режимов — простые
+  // страницы защищены тем же кодом, что апстримные, отдельного гарда нет.
+  //
+  // LazyPage обязателен: он даёт постраничный ErrorBoundary и Suspense. Без него
+  // исключение в простой странице уходит в app-boundary и роняет всё приложение,
+  // тогда как апстримная страница на том же месте деградирует мягко.
+  if (SimplePage) {
+    const page = (
+      <LazyPage>
+        <SimplePage />
+      </LazyPage>
+    );
+    return withLayout ? <SimpleShell>{page}</SimpleShell> : page;
+  }
+
+  // Сквозной список (#64): апстримная страница в простой оболочке. Стоит ПОСЛЕ
+  // ветки реестра (своя простая страница сильнее) и ДО апстримной, иначе
+  // недостижима. `children` уже завёрнут в LazyPage самим маршрутом, так что
+  // постраничный ErrorBoundary и Suspense не теряются, а `withLayout={false}`
+  // означает «без оболочки вообще» и здесь тоже.
+  if (isPassthrough) {
+    return withLayout ? <SimpleShell>{children}</SimpleShell> : <>{children}</>;
   }
 
   return withLayout ? <Layout>{children}</Layout> : <>{children}</>;
@@ -597,6 +632,23 @@ function App() {
               <LazyPage>
                 <Connection />
               </LazyPage>
+            </ProtectedRoute>
+          }
+        />
+        {/* ⚠️ ЛОКАЛЬНЫЙ ПАТЧ ФОРКА (задача #74) — маршрута `/news` в апстриме нет.
+            Апстримная лента новостей стоит блоком на главной; простому режиму
+            владелец потребовал её отдельной страницей. Шов подмены живёт в
+            `ProtectedRoute`, поэтому без записи маршрута простая страница не
+            открылась бы вовсе — подменять было бы нечего.
+            В экспертном режиме адрес уводит на главную: апстримной страницы
+            списка новостей не существует, а лента у экспертов и так на главной.
+            При синке с апстримом эту запись СОХРАНИТЬ; убрать её — значит убрать
+            страницу новостей простого режима. Обратимо одной строкой. */}
+        <Route
+          path="/news"
+          element={
+            <ProtectedRoute>
+              <Navigate to="/" replace />
             </ProtectedRoute>
           }
         />

@@ -13,16 +13,7 @@ import type { SupportConfig, TicketDetail } from '../types';
 import { Card } from '@/components/data-display/Card';
 import { Button } from '@/components/primitives/Button';
 import { staggerContainer, staggerItem } from '@/components/motion/transitions';
-import {
-  ArrowRightIcon,
-  ChatIcon,
-  CloseIcon,
-  ImageIcon,
-  InfoIcon,
-  PlusIcon,
-  SendIcon,
-} from '@/components/icons';
-import { Link } from 'react-router';
+import { ChatIcon, CloseIcon, ImageIcon, PlusIcon, SendIcon } from '@/components/icons';
 import { usePlatform } from '@/platform';
 import { linkifyText } from '../utils/linkify';
 import { resolveSupportContact } from '../utils/supportContact';
@@ -336,25 +327,6 @@ export default function Support() {
           <PlusIcon />
           <span className="ml-2">{t('support.newTicket')}</span>
         </Button>
-      </motion.div>
-
-      {/* Ответы на частые вопросы — перед формой обращения: типовые проблемы
-          решаются без тикета. FAQ живёт на /info, поддержка про него молчала. */}
-      <motion.div variants={staggerItem}>
-        <Link to="/info" className="block">
-          <Card className="flex items-center justify-between transition-colors hover:border-accent-500/40">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-dark-800">
-                <InfoIcon className="h-5 w-5 text-dark-400" />
-              </div>
-              <div>
-                <div className="text-sm font-medium text-dark-100">{t('support.faqLinkTitle')}</div>
-                <div className="text-xs text-dark-400">{t('support.faqLinkHint')}</div>
-              </div>
-            </div>
-            <ArrowRightIcon className="h-5 w-5 shrink-0 text-dark-400" />
-          </Card>
-        </Link>
       </motion.div>
 
       {/* Contact support card for "both" mode — self-animated: mounts after the

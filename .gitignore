@@ -2,7 +2,18 @@
 node_modules/
 
 # Claude local settings
-.claude/
+# Привязки харнеса версионируем, локальное состояние — нет.
+# Именно `.claude/*`, а не `.claude/`: git не заходит внутрь исключённого
+# каталога, и из-под `.claude/` ни один `!`-паттерн бы не сработал.
+.claude/*
+!.claude/harness.json
+!.claude/forge.md
+!.claude/orchestrator.md
+!.claude/settings.json
+.claude/worktrees/
+.claude/settings.local.json
+.claude/handoff.md
+.claude/telemetry.md
 
 # Build output
 dist/

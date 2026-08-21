@@ -272,7 +272,6 @@
   "dashboard": {
     "title": "Личный кабинет",
     "welcome": "Добро пожаловать, {{name}}!",
-    "welcomeGreeting": "Добро пожаловать,",
     "welcomeNoName": "Добро пожаловать!",
     "yourSubscription": "Ваша подписка",
     "quickActions": "Быстрые действия",
@@ -883,8 +882,6 @@
       "activating": "Активация...",
       "success": "Промокод успешно активирован!",
       "balanceAdded": "На баланс начислено: {{amount}} ₽",
-      "expiredLabel": "Истекла",
-      "disabledLabel": "Отключена",
       "errors": {
         "not_found": "Промокод не найден",
         "expired": "Срок действия промокода истёк",
@@ -1116,10 +1113,8 @@
   },
   "support": {
     "title": "Поддержка",
-    "newTicket": "Задать вопрос",
-    "yourTickets": "Обращения",
-    "faqLinkTitle": "Ответы на частые вопросы",
-    "faqLinkHint": "Возможно, решение уже описано — посмотрите перед обращением",
+    "newTicket": "Новый тикет",
+    "yourTickets": "Ваши обращения",
     "noTickets": "Нет обращений",
     "createTicket": "Создать обращение",
     "subject": "Тема",
@@ -1134,7 +1129,7 @@
     "sendReply": "Отправить ответ",
     "you": "Вы",
     "supportTeam": "Поддержка",
-    "selectTicket": "Выберите обращение или задайте новый вопрос",
+    "selectTicket": "Выберите обращение или создайте новое",
     "created": "Создано",
     "repliesDisabled": "Ответы на это обращение отключены",
     "status": {

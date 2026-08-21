@@ -1,0 +1,33 @@
+{
+  "env": {
+    "OTEL_RESOURCE_ATTRIBUTES": "repo=cabinet"
+  },
+  "permissions": {
+    "allow": [
+      "Bash(C:\\CLI\\glab\\glab.exe:*)",
+      "Bash(glab:*)",
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git add:*)",
+      "Bash(git checkout:*)",
+      "Bash(git switch:*)",
+      "Bash(git fetch:*)",
+      "Bash(git pull:*)",
+      "Bash(git worktree:*)",
+      "Bash(git rev-parse:*)"
+    ],
+    "deny": ["Read(./.env)", "Read(./.env.*)", "Read(**/*.key)", "Read(**/*.pem)"]
+  },
+  "extraKnownMarketplaces": {
+    "air-harness": {
+      "source": { "source": "url", "url": "https://gitlab.com/airerik/air-harness.git" }
+    }
+  },
+  "enabledPlugins": { "harness-core@air-harness": true }
+}

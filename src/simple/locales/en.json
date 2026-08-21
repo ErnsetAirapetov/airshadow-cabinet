@@ -1,0 +1,51 @@
+{
+  "mode": {
+    "toExpert": "All features",
+    "toSimple": "Simplified view"
+  },
+  "nav": {
+    "openMenu": "Open menu"
+  },
+  "dashboard": {
+    "greeting": "Welcome,",
+    "errorTitle": "Could not load the subscription",
+    "errorHint": "Looks like the server is unreachable.",
+    "retry": "Try again",
+    "timeLeftUnderMinute": "Less than a minute"
+  },
+  "news": {
+    "title": "News",
+    "emptyTitle": "No news yet",
+    "emptyHint": "As soon as there is something, it will show up here.",
+    "errorTitle": "Could not load the news",
+    "errorHint": "Looks like the server is unreachable.",
+    "retry": "Try again"
+  },
+  "balance": {
+    "promocode": {
+      "expiredLabel": "Expired",
+      "disabledLabel": "Disabled"
+    }
+  },
+  "subscription": {
+    "cta": {
+      "expiredHint": "Choose a plan and pay",
+      "trialHint": "More traffic and devices",
+      "renewHint": "Pay for the current plan for a new term",
+      "changeHint": "Move to a different plan",
+      "dailyHint": "Charged daily — no manual renewal needed"
+    },
+    "unsupportedTariff": {
+      "title": "Your plan is no longer supported",
+      "hint": "Pick another plan — payment works the same way"
+    },
+    "expiredRenewAction": "Renew subscription"
+  },
+  "support": {
+    "newTicket": "Ask a question",
+    "yourTickets": "Requests",
+    "selectTicket": "Select a request or ask a new question",
+    "faqLinkTitle": "Frequently asked questions",
+    "faqLinkHint": "Your answer may already be there — check before opening a ticket"
+  }
+}

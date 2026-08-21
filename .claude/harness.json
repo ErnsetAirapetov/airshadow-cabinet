@@ -1,0 +1,15 @@
+{
+  "mainBranch": "airshadow-dev",
+  "protectedBranches": ["airshadow-dev", "airshadow-prod", "main"],
+  "ownerEmail": "aes@bkn-spb.ru",
+  "worktreeDir": ".claude/worktrees",
+  "checks": ["npm test", "npm run build"],
+  "editChecks": [{ "match": "\\.(ts|tsx)$", "run": "npx tsc --noEmit" }],
+  "models": {
+    "impl": { "S": "sonnet", "M": "opus", "L": "opus" },
+    "reviewer": "opus",
+    "groomer": "sonnet",
+    "scaffolder": "sonnet"
+  },
+  "strict": true
+}

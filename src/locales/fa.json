@@ -254,7 +254,6 @@
   "dashboard": {
     "title": "داشبورد",
     "welcome": "خوش آمدید، {{name}}!",
-    "welcomeGreeting": "خوش آمدید،",
     "welcomeNoName": "خوش آمدید!",
     "yourSubscription": "اشتراک شما",
     "quickActions": "دسترسی سریع",
@@ -741,8 +740,6 @@
       "activating": "در حال فعال‌سازی...",
       "success": "کد تخفیف با موفقیت فعال شد!",
       "balanceAdded": "موجودی اضافه شده: {{amount}}",
-      "expiredLabel": "منقضی شده",
-      "disabledLabel": "غیرفعال",
       "errors": {
         "not_found": "کد تخفیف یافت نشد",
         "expired": "کد تخفیف منقضی شده",
@@ -974,8 +971,6 @@
     "title": "پشتیبانی",
     "newTicket": "تیکت جدید",
     "yourTickets": "تیکت‌های شما",
-    "faqLinkTitle": "پرسش‌های متداول",
-    "faqLinkHint": "شاید پاسخ شما آنجا باشد — پیش از ثبت تیکت ببینید",
     "noTickets": "تیکتی موجود نیست",
     "createTicket": "ایجاد تیکت",
     "subject": "موضوع",
